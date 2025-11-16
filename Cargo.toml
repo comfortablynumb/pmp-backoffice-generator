@@ -32,3 +32,11 @@ async-trait = "0.1"
 [features]
 default = ["database"]
 database = ["sqlx"]
+
+[lib]
+name = "pmp_backoffice_generator"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pmp-backoffice-generator"
+path = "src/main.rs"

@@ -1814,12 +1814,74 @@ function updateColorPaletteValue($container, $hiddenInput) {
     $hiddenInput.val(colors.join(','));
 }
 
+// Toast notification system
+function showToast(message, type = 'info', duration = 5000) {
+    const $container = $('#toast-container');
+
+    // Create toast element
+    const toastId = 'toast-' + Date.now();
+    const icons = {
+        success: 'fa-check-circle',
+        error: 'fa-exclamation-circle',
+        warning: 'fa-exclamation-triangle',
+        info: 'fa-info-circle'
+    };
+
+    const $toast = $('<div>')
+        .attr('id', toastId)
+        .addClass(`toast toast-${type}`)
+        .html(`
+            <i class="fas ${icons[type]} toast-icon"></i>
+            <div class="toast-message">${message}</div>
+            <i class="fas fa-times toast-close"></i>
+        `);
+
+    // Add to container
+    $container.append($toast);
+
+    // Trigger animation
+    setTimeout(() => {
+        $toast.addClass('show');
+    }, 10);
+
+    // Auto-hide after duration
+    const hideTimeout = setTimeout(() => {
+        hideToast(toastId);
+    }, duration);
+
+    // Close button handler
+    $toast.find('.toast-close').on('click', function() {
+        clearTimeout(hideTimeout);
+        hideToast(toastId);
+    });
+}
+
+function hideToast(toastId) {
+    const $toast = $('#' + toastId);
+    $toast.removeClass('show').addClass('hide');
+
+    // Remove from DOM after animation
+    setTimeout(() => {
+        $toast.remove();
+    }, 300);
+}
+
 function showError(message) {
-    alert('Error: ' + message);
+    showToast(message, 'error', 6000);
     console.error(message);
 }
 
 function showSuccess(message) {
-    alert(message);
+    showToast(message, 'success', 4000);
     console.log(message);
+}
+
+function showWarning(message) {
+    showToast(message, 'warning', 5000);
+    console.warn(message);
+}
+
+function showInfo(message) {
+    showToast(message, 'info', 4000);
+    console.info(message);
 }
