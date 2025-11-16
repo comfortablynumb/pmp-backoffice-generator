@@ -226,16 +226,13 @@ pub enum FilterType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum SortOrder {
+    #[default]
     Ascending,
     Descending,
 }
 
-impl Default for SortOrder {
-    fn default() -> Self {
-        SortOrder::Ascending
-    }
-}
 
 /// Configuration specific to form actions
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -266,17 +263,14 @@ impl Default for FormActionConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum FormMode {
+    #[default]
     Create,
     Update,
     Delete,
 }
 
-impl Default for FormMode {
-    fn default() -> Self {
-        FormMode::Create
-    }
-}
 
 /// Field configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -473,21 +467,13 @@ pub enum FieldType {
 
 /// Text field configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct TextFieldConfig {
     pub min_length: Option<usize>,
     pub max_length: Option<usize>,
     pub pattern: Option<String>,
 }
 
-impl Default for TextFieldConfig {
-    fn default() -> Self {
-        Self {
-            min_length: None,
-            max_length: None,
-            pattern: None,
-        }
-    }
-}
 
 /// Number field configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -512,6 +498,7 @@ impl Default for NumberFieldConfig {
 
 /// Password field configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct PasswordFieldConfig {
     pub min_length: Option<usize>,
     pub max_length: Option<usize>,
@@ -525,55 +512,29 @@ pub struct PasswordFieldConfig {
     pub require_special: bool,
 }
 
-impl Default for PasswordFieldConfig {
-    fn default() -> Self {
-        Self {
-            min_length: None,
-            max_length: None,
-            require_uppercase: false,
-            require_lowercase: false,
-            require_number: false,
-            require_special: false,
-        }
-    }
-}
 
 /// Date field configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct DateFieldConfig {
     pub min_date: Option<String>,
     pub max_date: Option<String>,
     pub format: Option<String>,
 }
 
-impl Default for DateFieldConfig {
-    fn default() -> Self {
-        Self {
-            min_date: None,
-            max_date: None,
-            format: None,
-        }
-    }
-}
 
 /// Boolean field configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct BooleanFieldConfig {
     pub true_label: Option<String>,
     pub false_label: Option<String>,
 }
 
-impl Default for BooleanFieldConfig {
-    fn default() -> Self {
-        Self {
-            true_label: None,
-            false_label: None,
-        }
-    }
-}
 
 /// Select field configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct SelectFieldConfig {
     pub options: Vec<SelectOption>,
     #[serde(default)]
@@ -582,15 +543,6 @@ pub struct SelectFieldConfig {
     pub searchable: bool,
 }
 
-impl Default for SelectFieldConfig {
-    fn default() -> Self {
-        Self {
-            options: Vec::new(),
-            multiple: false,
-            searchable: false,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SelectOption {
@@ -648,6 +600,7 @@ impl Default for EmailFieldConfig {
 
 /// File field configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct FileFieldConfig {
     pub accepted_types: Option<Vec<String>>,
     pub max_size_mb: Option<f64>,
@@ -655,15 +608,6 @@ pub struct FileFieldConfig {
     pub multiple: bool,
 }
 
-impl Default for FileFieldConfig {
-    fn default() -> Self {
-        Self {
-            accepted_types: None,
-            max_size_mb: None,
-            multiple: false,
-        }
-    }
-}
 
 /// URL field configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -685,6 +629,7 @@ impl Default for UrlFieldConfig {
 
 /// Phone field configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct PhoneFieldConfig {
     pub format: Option<String>,
     pub country_code: Option<String>,
@@ -692,16 +637,6 @@ pub struct PhoneFieldConfig {
     pub validation_pattern: Option<String>,
 }
 
-impl Default for PhoneFieldConfig {
-    fn default() -> Self {
-        Self {
-            format: None,
-            country_code: None,
-            allow_extensions: false,
-            validation_pattern: None,
-        }
-    }
-}
 
 /// Currency field configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -873,7 +808,13 @@ impl Default for ImageFieldConfig {
     fn default() -> Self {
         Self {
             max_size_mb: Some(5.0),
-            accepted_formats: Some(vec!["jpg".to_string(), "jpeg".to_string(), "png".to_string(), "gif".to_string(), "webp".to_string()]),
+            accepted_formats: Some(vec![
+                "jpg".to_string(),
+                "jpeg".to_string(),
+                "png".to_string(),
+                "gif".to_string(),
+                "webp".to_string(),
+            ]),
             max_width: None,
             max_height: None,
             min_width: None,
@@ -941,9 +882,9 @@ pub struct WeekdayFieldConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum WeekdayFormat {
-    Short,   // Mon, Tue, Wed
-    Long,    // Monday, Tuesday, Wednesday
-    Number,  // 1-7
+    Short,  // Mon, Tue, Wed
+    Long,   // Monday, Tuesday, Wednesday
+    Number, // 1-7
 }
 
 impl Default for WeekdayFieldConfig {
@@ -966,9 +907,9 @@ pub struct MonthFieldConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MonthFormat {
-    Short,   // Jan, Feb, Mar
-    Long,    // January, February, March
-    Number,  // 1-12
+    Short,  // Jan, Feb, Mar
+    Long,   // January, February, March
+    Number, // 1-12
 }
 
 impl Default for MonthFieldConfig {
@@ -1018,9 +959,9 @@ pub struct DurationFieldConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DurationFormat {
-    HoursMinutes,    // 2h 30m
-    Minutes,         // 150 minutes
-    Seconds,         // 9000 seconds
+    HoursMinutes, // 2h 30m
+    Minutes,      // 150 minutes
+    Seconds,      // 9000 seconds
 }
 
 impl Default for DurationFieldConfig {
@@ -1290,7 +1231,11 @@ impl Default for VideoFieldConfig {
     fn default() -> Self {
         Self {
             max_size_mb: Some(100.0),
-            accepted_formats: Some(vec!["mp4".to_string(), "webm".to_string(), "ogg".to_string()]),
+            accepted_formats: Some(vec![
+                "mp4".to_string(),
+                "webm".to_string(),
+                "ogg".to_string(),
+            ]),
             max_duration_seconds: None,
             enable_preview: true,
             multiple: false,
@@ -1312,7 +1257,11 @@ impl Default for AudioFieldConfig {
     fn default() -> Self {
         Self {
             max_size_mb: Some(50.0),
-            accepted_formats: Some(vec!["mp3".to_string(), "wav".to_string(), "ogg".to_string()]),
+            accepted_formats: Some(vec![
+                "mp3".to_string(),
+                "wav".to_string(),
+                "ogg".to_string(),
+            ]),
             max_duration_seconds: None,
             enable_preview: true,
             multiple: false,
@@ -1350,25 +1299,13 @@ impl Default for BarcodeFieldConfig {
 }
 
 /// Date/Time range field configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DateTimeRangeFieldConfig {
     pub include_time: bool,
     pub min_date: Option<String>,
     pub max_date: Option<String>,
     pub min_range_days: Option<u32>,
     pub max_range_days: Option<u32>,
-}
-
-impl Default for DateTimeRangeFieldConfig {
-    fn default() -> Self {
-        Self {
-            include_time: false,
-            min_date: None,
-            max_date: None,
-            min_range_days: None,
-            max_range_days: None,
-        }
-    }
 }
 
 /// Slider field configuration (multi-value)
@@ -1537,8 +1474,8 @@ pub async fn load_app_config<P: AsRef<Path>>(path: P) -> Result<AppConfig> {
         .await
         .context("Failed to read app config file")?;
 
-    let config: AppConfig = serde_yaml::from_str(&content)
-        .context("Failed to parse app config YAML")?;
+    let config: AppConfig =
+        serde_yaml::from_str(&content).context("Failed to parse app config YAML")?;
 
     Ok(config)
 }
@@ -1550,15 +1487,22 @@ pub async fn load_backoffices<P: AsRef<Path>>(dir: P) -> Result<Vec<BackofficeCo
     for entry in WalkDir::new(dir.as_ref())
         .into_iter()
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("yaml") ||
-                    e.path().extension().and_then(|s| s.to_str()) == Some("yml"))
+        .filter(|e| {
+            e.path().extension().and_then(|s| s.to_str()) == Some("yaml")
+                || e.path().extension().and_then(|s| s.to_str()) == Some("yml")
+        })
     {
         let content = tokio::fs::read_to_string(entry.path())
             .await
-            .context(format!("Failed to read backoffice config: {:?}", entry.path()))?;
+            .context(format!(
+                "Failed to read backoffice config: {:?}",
+                entry.path()
+            ))?;
 
-        let config: BackofficeConfig = serde_yaml::from_str(&content)
-            .context(format!("Failed to parse backoffice config: {:?}", entry.path()))?;
+        let config: BackofficeConfig = serde_yaml::from_str(&content).context(format!(
+            "Failed to parse backoffice config: {:?}",
+            entry.path()
+        ))?;
 
         backoffices.push(config);
     }

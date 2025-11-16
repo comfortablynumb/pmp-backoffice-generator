@@ -35,8 +35,10 @@ pub async fn start_server(config: AppConfig, backoffices: Vec<BackofficeConfig>)
         .route("/api/config", get(config_handler))
         .route("/api/backoffices", get(backoffices_handler))
         .route("/api/backoffices/:id", get(backoffice_handler))
-        .route("/api/backoffices/:backoffice_id/sections/:section_id/actions/:action_id",
-               get(execute_action_handler).post(execute_mutation_handler))
+        .route(
+            "/api/backoffices/:backoffice_id/sections/:section_id/actions/:action_id",
+            get(execute_action_handler).post(execute_mutation_handler),
+        )
         .nest_service("/static", ServeDir::new("static"))
         .with_state(state);
 
@@ -99,42 +101,81 @@ async fn execute_action_handler(
     // Find the backoffice
     let backoffice = match state.backoffices.iter().find(|b| b.id == backoffice_id) {
         Some(b) => b,
-        None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Backoffice not found"}))).into_response(),
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "Backoffice not found"})),
+            )
+                .into_response()
+        }
     };
 
     // Find the section
     let section = match backoffice.sections.iter().find(|s| s.id == section_id) {
         Some(s) => s,
-        None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Section not found"}))).into_response(),
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "Section not found"})),
+            )
+                .into_response()
+        }
     };
 
     // Find the action
     let action = match section.actions.iter().find(|a| a.id == action_id) {
         Some(a) => a,
-        None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Action not found"}))).into_response(),
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "Action not found"})),
+            )
+                .into_response()
+        }
     };
 
     // Get the data source
     let ds_config = match backoffice.data_sources.get(&action.data_source) {
         Some(ds) => ds,
-        None => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Data source not found"}))).into_response(),
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Data source not found"})),
+            )
+                .into_response()
+        }
     };
 
     // Create data source instance
     let data_source = match data_source::create_data_source(ds_config) {
         Ok(ds) => ds,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
     };
 
     // Execute the query
-    let query_str = action.query.as_deref().or(action.endpoint.as_deref()).unwrap_or("");
-    let params_converted: HashMap<String, Value> = query.params.iter()
+    let query_str = action
+        .query
+        .as_deref()
+        .or(action.endpoint.as_deref())
+        .unwrap_or("");
+    let params_converted: HashMap<String, Value> = query
+        .params
+        .iter()
         .map(|(k, v)| (k.clone(), Value::String(v.clone())))
         .collect();
 
     match &action.action_type {
         ActionType::List { fields, config } => {
-            match data_source.execute_query(query_str, Some(&params_converted)).await {
+            match data_source
+                .execute_query(query_str, Some(&params_converted))
+                .await
+            {
                 Ok(mut result) => {
                     let total_items = result.len();
 
@@ -146,41 +187,68 @@ async fn execute_action_handler(
 
                         result = result.into_iter().skip(start).take(page_size).collect();
 
-                        (StatusCode::OK, Json(serde_json::json!({
-                            "data": result,
-                            "fields": fields,
-                            "config": config,
-                            "pagination": {
-                                "page": page,
-                                "page_size": page_size,
-                                "total_items": total_items,
-                                "total_pages": (total_items + page_size - 1) / page_size,
-                            }
-                        }))).into_response()
+                        (
+                            StatusCode::OK,
+                            Json(serde_json::json!({
+                                "data": result,
+                                "fields": fields,
+                                "config": config,
+                                "pagination": {
+                                    "page": page,
+                                    "page_size": page_size,
+                                    "total_items": total_items,
+                                    "total_pages": total_items.div_ceil(page_size),
+                                }
+                            })),
+                        )
+                            .into_response()
                     } else {
-                        (StatusCode::OK, Json(serde_json::json!({
-                            "data": result,
-                            "fields": fields,
-                            "config": config,
-                        }))).into_response()
+                        (
+                            StatusCode::OK,
+                            Json(serde_json::json!({
+                                "data": result,
+                                "fields": fields,
+                                "config": config,
+                            })),
+                        )
+                            .into_response()
                     }
-                },
-                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+                }
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": e.to_string()})),
+                )
+                    .into_response(),
             }
-        },
+        }
         ActionType::View { fields } | ActionType::Custom { fields } => {
-            match data_source.execute_query(query_str, Some(&params_converted)).await {
-                Ok(result) => (StatusCode::OK, Json(serde_json::json!({"data": result, "fields": fields}))).into_response(),
-                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+            match data_source
+                .execute_query(query_str, Some(&params_converted))
+                .await
+            {
+                Ok(result) => (
+                    StatusCode::OK,
+                    Json(serde_json::json!({"data": result, "fields": fields})),
+                )
+                    .into_response(),
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": e.to_string()})),
+                )
+                    .into_response(),
             }
-        },
+        }
         ActionType::Form { fields, config } => {
             // For form actions in GET, return the form configuration
-            (StatusCode::OK, Json(serde_json::json!({
-                "fields": fields,
-                "config": config,
-            }))).into_response()
-        },
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "fields": fields,
+                    "config": config,
+                })),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -199,38 +267,80 @@ async fn execute_mutation_handler(
     // Find the backoffice
     let backoffice = match state.backoffices.iter().find(|b| b.id == backoffice_id) {
         Some(b) => b,
-        None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Backoffice not found"}))).into_response(),
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "Backoffice not found"})),
+            )
+                .into_response()
+        }
     };
 
     // Find the section
     let section = match backoffice.sections.iter().find(|s| s.id == section_id) {
         Some(s) => s,
-        None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Section not found"}))).into_response(),
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "Section not found"})),
+            )
+                .into_response()
+        }
     };
 
     // Find the action
     let action = match section.actions.iter().find(|a| a.id == action_id) {
         Some(a) => a,
-        None => return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Action not found"}))).into_response(),
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": "Action not found"})),
+            )
+                .into_response()
+        }
     };
 
     // Get the data source
     let ds_config = match backoffice.data_sources.get(&action.data_source) {
         Some(ds) => ds,
-        None => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Data source not found"}))).into_response(),
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Data source not found"})),
+            )
+                .into_response()
+        }
     };
 
     // Create data source instance
     let data_source = match data_source::create_data_source(ds_config) {
         Ok(ds) => ds,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
     };
 
     // Execute the mutation
-    let query_str = action.query.as_deref().or(action.endpoint.as_deref()).unwrap_or("");
+    let query_str = action
+        .query
+        .as_deref()
+        .or(action.endpoint.as_deref())
+        .unwrap_or("");
 
     match data_source.execute_mutation(query_str, &payload.data).await {
-        Ok(result) => (StatusCode::OK, Json(serde_json::json!({"success": true, "data": result}))).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+        Ok(result) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"success": true, "data": result})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
     }
 }

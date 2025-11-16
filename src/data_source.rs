@@ -6,7 +6,11 @@ use std::collections::HashMap;
 /// Data source trait for executing queries
 #[async_trait::async_trait]
 pub trait DataSource: Send + Sync {
-    async fn execute_query(&self, query: &str, params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>>;
+    async fn execute_query(
+        &self,
+        query: &str,
+        params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>>;
     async fn execute_mutation(&self, query: &str, data: &HashMap<String, Value>) -> Result<Value>;
 }
 
@@ -26,17 +30,27 @@ impl DatabaseDataSource {
 
 #[async_trait::async_trait]
 impl DataSource for DatabaseDataSource {
-    async fn execute_query(&self, query: &str, _params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
+    async fn execute_query(
+        &self,
+        query: &str,
+        _params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
         // This is a placeholder implementation
         // In a real implementation, you would use sqlx to execute the query
-        tracing::warn!("Database query execution not yet fully implemented: {}", query);
+        tracing::warn!(
+            "Database query execution not yet fully implemented: {}",
+            query
+        );
 
         // Return mock data for demonstration
         Ok(vec![])
     }
 
     async fn execute_mutation(&self, query: &str, _data: &HashMap<String, Value>) -> Result<Value> {
-        tracing::warn!("Database mutation execution not yet fully implemented: {}", query);
+        tracing::warn!(
+            "Database mutation execution not yet fully implemented: {}",
+            query
+        );
         Ok(Value::Bool(true))
     }
 }
@@ -61,7 +75,11 @@ impl ApiDataSource {
 
 #[async_trait::async_trait]
 impl DataSource for ApiDataSource {
-    async fn execute_query(&self, endpoint: &str, params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
+    async fn execute_query(
+        &self,
+        endpoint: &str,
+        params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
         let url = format!("{}/{}", self.base_url, endpoint);
 
         let mut request = self.client.get(&url);
@@ -103,7 +121,11 @@ impl DataSource for ApiDataSource {
         }
     }
 
-    async fn execute_mutation(&self, endpoint: &str, data: &HashMap<String, Value>) -> Result<Value> {
+    async fn execute_mutation(
+        &self,
+        endpoint: &str,
+        data: &HashMap<String, Value>,
+    ) -> Result<Value> {
         let url = format!("{}/{}", self.base_url, endpoint);
 
         let mut request = self.client.post(&url);
@@ -140,12 +162,19 @@ impl GraphQLDataSource {
 
 #[async_trait::async_trait]
 impl DataSource for GraphQLDataSource {
-    async fn execute_query(&self, query: &str, params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
+    async fn execute_query(
+        &self,
+        query: &str,
+        params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
         let mut request_body = HashMap::new();
         request_body.insert("query", Value::String(query.to_string()));
 
         if let Some(params) = params {
-            request_body.insert("variables", Value::Object(params.clone().into_iter().collect()));
+            request_body.insert(
+                "variables",
+                Value::Object(params.clone().into_iter().collect()),
+            );
         }
 
         let mut request = self.client.post(&self.endpoint);
@@ -169,10 +198,17 @@ impl DataSource for GraphQLDataSource {
         Ok(vec![])
     }
 
-    async fn execute_mutation(&self, mutation: &str, variables: &HashMap<String, Value>) -> Result<Value> {
+    async fn execute_mutation(
+        &self,
+        mutation: &str,
+        variables: &HashMap<String, Value>,
+    ) -> Result<Value> {
         let mut request_body = HashMap::new();
         request_body.insert("query", Value::String(mutation.to_string()));
-        request_body.insert("variables", Value::Object(variables.clone().into_iter().collect()));
+        request_body.insert(
+            "variables",
+            Value::Object(variables.clone().into_iter().collect()),
+        );
 
         let mut request = self.client.post(&self.endpoint);
 
@@ -209,13 +245,23 @@ impl MongoDBDataSource {
 
 #[async_trait::async_trait]
 impl DataSource for MongoDBDataSource {
-    async fn execute_query(&self, query: &str, _params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
-        tracing::warn!("MongoDB query execution not yet fully implemented: {}", query);
+    async fn execute_query(
+        &self,
+        query: &str,
+        _params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        tracing::warn!(
+            "MongoDB query execution not yet fully implemented: {}",
+            query
+        );
         Ok(vec![])
     }
 
     async fn execute_mutation(&self, query: &str, _data: &HashMap<String, Value>) -> Result<Value> {
-        tracing::warn!("MongoDB mutation execution not yet fully implemented: {}", query);
+        tracing::warn!(
+            "MongoDB mutation execution not yet fully implemented: {}",
+            query
+        );
         Ok(Value::Bool(true))
     }
 }
@@ -239,13 +285,20 @@ impl RedisDataSource {
 
 #[async_trait::async_trait]
 impl DataSource for RedisDataSource {
-    async fn execute_query(&self, key: &str, _params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
+    async fn execute_query(
+        &self,
+        key: &str,
+        _params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
         tracing::warn!("Redis query execution not yet fully implemented: {}", key);
         Ok(vec![])
     }
 
     async fn execute_mutation(&self, key: &str, _data: &HashMap<String, Value>) -> Result<Value> {
-        tracing::warn!("Redis mutation execution not yet fully implemented: {}", key);
+        tracing::warn!(
+            "Redis mutation execution not yet fully implemented: {}",
+            key
+        );
         Ok(Value::Bool(true))
     }
 }
@@ -273,12 +326,23 @@ impl ElasticsearchDataSource {
 
 #[async_trait::async_trait]
 impl DataSource for ElasticsearchDataSource {
-    async fn execute_query(&self, query: &str, _params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
-        tracing::warn!("Elasticsearch query execution not yet fully implemented: {}", query);
+    async fn execute_query(
+        &self,
+        query: &str,
+        _params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        tracing::warn!(
+            "Elasticsearch query execution not yet fully implemented: {}",
+            query
+        );
         Ok(vec![])
     }
 
-    async fn execute_mutation(&self, _doc_id: &str, _data: &HashMap<String, Value>) -> Result<Value> {
+    async fn execute_mutation(
+        &self,
+        _doc_id: &str,
+        _data: &HashMap<String, Value>,
+    ) -> Result<Value> {
         tracing::warn!("Elasticsearch mutation execution not yet fully implemented");
         Ok(Value::Bool(true))
     }
@@ -297,7 +361,12 @@ pub struct GrpcDataSource {
 }
 
 impl GrpcDataSource {
-    pub fn new(endpoint: String, proto_file: String, service_name: String, tls_enabled: bool) -> Self {
+    pub fn new(
+        endpoint: String,
+        proto_file: String,
+        service_name: String,
+        tls_enabled: bool,
+    ) -> Self {
         Self {
             endpoint,
             proto_file,
@@ -309,13 +378,24 @@ impl GrpcDataSource {
 
 #[async_trait::async_trait]
 impl DataSource for GrpcDataSource {
-    async fn execute_query(&self, method: &str, _params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
+    async fn execute_query(
+        &self,
+        method: &str,
+        _params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
         tracing::warn!("gRPC query execution not yet fully implemented: {}", method);
         Ok(vec![])
     }
 
-    async fn execute_mutation(&self, method: &str, _data: &HashMap<String, Value>) -> Result<Value> {
-        tracing::warn!("gRPC mutation execution not yet fully implemented: {}", method);
+    async fn execute_mutation(
+        &self,
+        method: &str,
+        _data: &HashMap<String, Value>,
+    ) -> Result<Value> {
+        tracing::warn!(
+            "gRPC mutation execution not yet fully implemented: {}",
+            method
+        );
         Ok(Value::Bool(true))
     }
 }
@@ -342,13 +422,24 @@ impl KafkaDataSource {
 
 #[async_trait::async_trait]
 impl DataSource for KafkaDataSource {
-    async fn execute_query(&self, query: &str, _params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
+    async fn execute_query(
+        &self,
+        query: &str,
+        _params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
         tracing::warn!("Kafka query execution not yet fully implemented: {}", query);
         Ok(vec![])
     }
 
-    async fn execute_mutation(&self, message: &str, _data: &HashMap<String, Value>) -> Result<Value> {
-        tracing::warn!("Kafka mutation execution not yet fully implemented: {}", message);
+    async fn execute_mutation(
+        &self,
+        message: &str,
+        _data: &HashMap<String, Value>,
+    ) -> Result<Value> {
+        tracing::warn!(
+            "Kafka mutation execution not yet fully implemented: {}",
+            message
+        );
         Ok(Value::Bool(true))
     }
 }
@@ -375,7 +466,11 @@ impl S3DataSource {
 
 #[async_trait::async_trait]
 impl DataSource for S3DataSource {
-    async fn execute_query(&self, key: &str, _params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
+    async fn execute_query(
+        &self,
+        key: &str,
+        _params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
         tracing::warn!("S3 query execution not yet fully implemented: {}", key);
         Ok(vec![])
     }
@@ -405,13 +500,27 @@ impl FirebaseDataSource {
 
 #[async_trait::async_trait]
 impl DataSource for FirebaseDataSource {
-    async fn execute_query(&self, query: &str, _params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
-        tracing::warn!("Firebase query execution not yet fully implemented: {}", query);
+    async fn execute_query(
+        &self,
+        query: &str,
+        _params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        tracing::warn!(
+            "Firebase query execution not yet fully implemented: {}",
+            query
+        );
         Ok(vec![])
     }
 
-    async fn execute_mutation(&self, doc_id: &str, _data: &HashMap<String, Value>) -> Result<Value> {
-        tracing::warn!("Firebase mutation execution not yet fully implemented: {}", doc_id);
+    async fn execute_mutation(
+        &self,
+        doc_id: &str,
+        _data: &HashMap<String, Value>,
+    ) -> Result<Value> {
+        tracing::warn!(
+            "Firebase mutation execution not yet fully implemented: {}",
+            doc_id
+        );
         Ok(Value::Bool(true))
     }
 }
@@ -438,10 +547,16 @@ impl SupabaseDataSource {
 
 #[async_trait::async_trait]
 impl DataSource for SupabaseDataSource {
-    async fn execute_query(&self, _query: &str, _params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
+    async fn execute_query(
+        &self,
+        _query: &str,
+        _params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
         let url = format!("{}/rest/v1/{}", self.url, self.table);
 
-        let request = self.client.get(&url)
+        let request = self
+            .client
+            .get(&url)
             .header("apikey", &self.api_key)
             .header("Authorization", format!("Bearer {}", self.api_key));
 
@@ -463,10 +578,16 @@ impl DataSource for SupabaseDataSource {
         }
     }
 
-    async fn execute_mutation(&self, _doc_id: &str, data: &HashMap<String, Value>) -> Result<Value> {
+    async fn execute_mutation(
+        &self,
+        _doc_id: &str,
+        data: &HashMap<String, Value>,
+    ) -> Result<Value> {
         let url = format!("{}/rest/v1/{}", self.url, self.table);
 
-        let request = self.client.post(&url)
+        let request = self
+            .client
+            .post(&url)
             .header("apikey", &self.api_key)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&data);
@@ -500,13 +621,27 @@ impl WebSocketDataSource {
 
 #[async_trait::async_trait]
 impl DataSource for WebSocketDataSource {
-    async fn execute_query(&self, message: &str, _params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
-        tracing::warn!("WebSocket query execution not yet fully implemented: {}", message);
+    async fn execute_query(
+        &self,
+        message: &str,
+        _params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        tracing::warn!(
+            "WebSocket query execution not yet fully implemented: {}",
+            message
+        );
         Ok(vec![])
     }
 
-    async fn execute_mutation(&self, message: &str, _data: &HashMap<String, Value>) -> Result<Value> {
-        tracing::warn!("WebSocket mutation execution not yet fully implemented: {}", message);
+    async fn execute_mutation(
+        &self,
+        message: &str,
+        _data: &HashMap<String, Value>,
+    ) -> Result<Value> {
+        tracing::warn!(
+            "WebSocket mutation execution not yet fully implemented: {}",
+            message
+        );
         Ok(Value::Bool(true))
     }
 }
@@ -514,75 +649,96 @@ impl DataSource for WebSocketDataSource {
 /// Factory to create data sources
 pub fn create_data_source(config: &DataSourceConfig) -> Result<Box<dyn DataSource>> {
     match config {
-        DataSourceConfig::Database { db_type, .. } => {
-            Ok(Box::new(DatabaseDataSource::new(config.clone(), db_type.clone())))
-        }
-        DataSourceConfig::Api { base_url, headers, .. } => {
-            Ok(Box::new(ApiDataSource::new(base_url.clone(), headers.clone())))
-        }
-        DataSourceConfig::GraphQL { endpoint, headers, .. } => {
-            Ok(Box::new(GraphQLDataSource::new(endpoint.clone(), headers.clone())))
-        }
-        DataSourceConfig::MongoDB { connection_string, database, collection } => {
-            Ok(Box::new(MongoDBDataSource::new(
-                connection_string.clone(),
-                database.clone(),
-                collection.clone(),
-            )))
-        }
-        DataSourceConfig::Redis { connection_string, key_prefix } => {
-            Ok(Box::new(RedisDataSource::new(
-                connection_string.clone(),
-                key_prefix.clone(),
-            )))
-        }
-        DataSourceConfig::Elasticsearch { nodes, index, .. } => {
-            Ok(Box::new(ElasticsearchDataSource::new(
-                nodes.clone(),
-                index.clone(),
-            )))
-        }
-        DataSourceConfig::Grpc { endpoint, proto_file, service_name, tls_enabled } => {
-            Ok(Box::new(GrpcDataSource::new(
-                endpoint.clone(),
-                proto_file.clone(),
-                service_name.clone(),
-                *tls_enabled,
-            )))
-        }
-        DataSourceConfig::Kafka { brokers, topic, group_id } => {
-            Ok(Box::new(KafkaDataSource::new(
-                brokers.clone(),
-                topic.clone(),
-                group_id.clone(),
-            )))
-        }
-        DataSourceConfig::S3 { bucket, region, prefix, .. } => {
-            Ok(Box::new(S3DataSource::new(
-                bucket.clone(),
-                region.clone(),
-                prefix.clone(),
-            )))
-        }
-        DataSourceConfig::Firebase { project_id, collection, .. } => {
-            Ok(Box::new(FirebaseDataSource::new(
-                project_id.clone(),
-                collection.clone(),
-            )))
-        }
-        DataSourceConfig::Supabase { url, api_key, table } => {
-            Ok(Box::new(SupabaseDataSource::new(
-                url.clone(),
-                api_key.clone(),
-                table.clone(),
-            )))
-        }
-        DataSourceConfig::WebSocket { url, reconnect, heartbeat_interval } => {
-            Ok(Box::new(WebSocketDataSource::new(
-                url.clone(),
-                *reconnect,
-                *heartbeat_interval,
-            )))
-        }
+        DataSourceConfig::Database { db_type, .. } => Ok(Box::new(DatabaseDataSource::new(
+            config.clone(),
+            db_type.clone(),
+        ))),
+        DataSourceConfig::Api {
+            base_url, headers, ..
+        } => Ok(Box::new(ApiDataSource::new(
+            base_url.clone(),
+            headers.clone(),
+        ))),
+        DataSourceConfig::GraphQL {
+            endpoint, headers, ..
+        } => Ok(Box::new(GraphQLDataSource::new(
+            endpoint.clone(),
+            headers.clone(),
+        ))),
+        DataSourceConfig::MongoDB {
+            connection_string,
+            database,
+            collection,
+        } => Ok(Box::new(MongoDBDataSource::new(
+            connection_string.clone(),
+            database.clone(),
+            collection.clone(),
+        ))),
+        DataSourceConfig::Redis {
+            connection_string,
+            key_prefix,
+        } => Ok(Box::new(RedisDataSource::new(
+            connection_string.clone(),
+            key_prefix.clone(),
+        ))),
+        DataSourceConfig::Elasticsearch { nodes, index, .. } => Ok(Box::new(
+            ElasticsearchDataSource::new(nodes.clone(), index.clone()),
+        )),
+        DataSourceConfig::Grpc {
+            endpoint,
+            proto_file,
+            service_name,
+            tls_enabled,
+        } => Ok(Box::new(GrpcDataSource::new(
+            endpoint.clone(),
+            proto_file.clone(),
+            service_name.clone(),
+            *tls_enabled,
+        ))),
+        DataSourceConfig::Kafka {
+            brokers,
+            topic,
+            group_id,
+        } => Ok(Box::new(KafkaDataSource::new(
+            brokers.clone(),
+            topic.clone(),
+            group_id.clone(),
+        ))),
+        DataSourceConfig::S3 {
+            bucket,
+            region,
+            prefix,
+            ..
+        } => Ok(Box::new(S3DataSource::new(
+            bucket.clone(),
+            region.clone(),
+            prefix.clone(),
+        ))),
+        DataSourceConfig::Firebase {
+            project_id,
+            collection,
+            ..
+        } => Ok(Box::new(FirebaseDataSource::new(
+            project_id.clone(),
+            collection.clone(),
+        ))),
+        DataSourceConfig::Supabase {
+            url,
+            api_key,
+            table,
+        } => Ok(Box::new(SupabaseDataSource::new(
+            url.clone(),
+            api_key.clone(),
+            table.clone(),
+        ))),
+        DataSourceConfig::WebSocket {
+            url,
+            reconnect,
+            heartbeat_interval,
+        } => Ok(Box::new(WebSocketDataSource::new(
+            url.clone(),
+            *reconnect,
+            *heartbeat_interval,
+        ))),
     }
 }

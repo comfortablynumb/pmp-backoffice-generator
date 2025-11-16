@@ -1,6 +1,6 @@
 mod config;
-mod server;
 mod data_source;
+mod server;
 
 use anyhow::Result;
 use tracing::info;
