@@ -32,9 +32,114 @@ function initDarkMode() {
     });
 }
 
+// Keyboard shortcuts
+function initKeyboardShortcuts() {
+    $(document).on('keydown', function(e) {
+        // Check for modifier key (Ctrl on Windows/Linux, Cmd on Mac)
+        const isMod = e.ctrlKey || e.metaKey;
+
+        // Esc: Close modal
+        if (e.key === 'Escape') {
+            if ($('#formModal').hasClass('active')) {
+                e.preventDefault();
+                closeModal();
+            }
+        }
+
+        // Ctrl/Cmd + K: Focus search
+        if (isMod && e.key === 'k') {
+            e.preventDefault();
+            const $search = $('#table-search');
+            if ($search.length) {
+                $search.focus();
+                showInfo('Search focused (Ctrl+K)');
+            }
+        }
+
+        // Ctrl/Cmd + E: Export CSV
+        if (isMod && e.key === 'e') {
+            e.preventDefault();
+            const exportBtn = document.querySelector('[data-action="export"]');
+            if (exportBtn) {
+                exportBtn.click();
+            }
+        }
+
+        // Ctrl/Cmd + D: Toggle dark mode
+        if (isMod && e.key === 'd') {
+            e.preventDefault();
+            $('#theme-toggle').click();
+        }
+
+        // Ctrl/Cmd + N: Open create form
+        if (isMod && e.key === 'n') {
+            e.preventDefault();
+            if (currentSection) {
+                const createAction = currentSection.actions.find(a =>
+                    a.type === 'form' && a.config && a.config.form_mode === 'create'
+                );
+                if (createAction) {
+                    showForm(createAction);
+                    showInfo('Create form opened (Ctrl+N)');
+                }
+            }
+        }
+
+        // Ctrl/Cmd + /: Show keyboard shortcuts help
+        if (isMod && e.key === '/') {
+            e.preventDefault();
+            showKeyboardShortcutsHelp();
+        }
+    });
+}
+
+// Show keyboard shortcuts help
+function showKeyboardShortcutsHelp() {
+    const shortcuts = [
+        { keys: 'Ctrl+K / ⌘K', desc: 'Focus search input' },
+        { keys: 'Ctrl+E / ⌘E', desc: 'Export table to CSV' },
+        { keys: 'Ctrl+D / ⌘D', desc: 'Toggle dark mode' },
+        { keys: 'Ctrl+N / ⌘N', desc: 'Open create form' },
+        { keys: 'Esc', desc: 'Close modal' },
+        { keys: 'Ctrl+/ / ⌘/', desc: 'Show this help' }
+    ];
+
+    let helpHtml = '<div class="p-4"><h3 class="text-lg font-bold mb-4">Keyboard Shortcuts</h3><table class="w-full">';
+
+    shortcuts.forEach(shortcut => {
+        helpHtml += `
+            <tr class="border-b border-gray-200">
+                <td class="py-2 pr-4 font-mono text-sm text-indigo-600">${shortcut.keys}</td>
+                <td class="py-2 text-sm">${shortcut.desc}</td>
+            </tr>
+        `;
+    });
+
+    helpHtml += '</table></div>';
+
+    $('#modal-title').text('Keyboard Shortcuts');
+    $('#form-fields').html(helpHtml);
+    $('#submit-text').parent().hide();
+    $('#formModal').addClass('active');
+
+    // Override form submit to just close
+    $('#dynamic-form').off('submit').on('submit', function(e) {
+        e.preventDefault();
+        closeModal();
+    });
+}
+
+// Override closeModal to reset form submit handler
+const originalCloseModal = closeModal;
+closeModal = function() {
+    $('#submit-text').parent().show();
+    originalCloseModal();
+};
+
 // Initialize the application
 $(document).ready(function() {
     initDarkMode();
+    initKeyboardShortcuts();
     loadBackoffices();
 });
 
