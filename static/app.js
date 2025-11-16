@@ -6,8 +6,35 @@ let backoffices = [];
 let currentPage = 1;
 let currentFilters = {};
 
+// Dark mode functionality
+function initDarkMode() {
+    // Check for saved theme preference or default to light mode
+    const savedTheme = localStorage.getItem('theme') || 'light';
+
+    if (savedTheme === 'dark') {
+        $('body').addClass('dark-mode');
+        $('#theme-toggle i').removeClass('fa-moon').addClass('fa-sun');
+    }
+
+    // Theme toggle handler
+    $('#theme-toggle').on('click', function() {
+        $('body').toggleClass('dark-mode');
+
+        if ($('body').hasClass('dark-mode')) {
+            localStorage.setItem('theme', 'dark');
+            $('#theme-toggle i').removeClass('fa-moon').addClass('fa-sun');
+            showInfo('Dark mode enabled');
+        } else {
+            localStorage.setItem('theme', 'light');
+            $('#theme-toggle i').removeClass('fa-sun').addClass('fa-moon');
+            showInfo('Light mode enabled');
+        }
+    });
+}
+
 // Initialize the application
 $(document).ready(function() {
+    initDarkMode();
     loadBackoffices();
 });
 

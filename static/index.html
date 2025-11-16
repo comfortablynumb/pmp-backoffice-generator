@@ -120,6 +120,72 @@
         .toast-close:hover {
             opacity: 1;
         }
+
+        /* Dark Mode */
+        body.dark-mode {
+            background-color: #1a202c;
+            color: #e2e8f0;
+        }
+
+        body.dark-mode .bg-gray-100 {
+            background-color: #1a202c !important;
+        }
+
+        body.dark-mode .bg-white {
+            background-color: #2d3748 !important;
+        }
+
+        body.dark-mode .bg-gray-50 {
+            background-color: #374151 !important;
+        }
+
+        body.dark-mode .text-gray-800,
+        body.dark-mode .text-gray-900 {
+            color: #e2e8f0 !important;
+        }
+
+        body.dark-mode .text-gray-700 {
+            color: #cbd5e0 !important;
+        }
+
+        body.dark-mode .text-gray-600 {
+            color: #a0aec0 !important;
+        }
+
+        body.dark-mode .text-gray-500 {
+            color: #718096 !important;
+        }
+
+        body.dark-mode .border-gray-200,
+        body.dark-mode .border-gray-300 {
+            border-color: #4a5568 !important;
+        }
+
+        body.dark-mode .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+            border-color: #4a5568 !important;
+        }
+
+        body.dark-mode input,
+        body.dark-mode textarea,
+        body.dark-mode select {
+            background-color: #2d3748 !important;
+            color: #e2e8f0 !important;
+            border-color: #4a5568 !important;
+        }
+
+        body.dark-mode .modal {
+            background-color: rgba(0,0,0,0.7);
+        }
+
+        .theme-toggle {
+            cursor: pointer;
+            font-size: 20px;
+            transition: transform 0.3s;
+        }
+
+        .theme-toggle:hover {
+            transform: scale(1.1);
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -134,6 +200,9 @@
                     <!-- Backoffice tabs will be inserted here -->
                 </div>
                 <div class="flex items-center space-x-4">
+                    <button id="theme-toggle" class="theme-toggle" title="Toggle dark mode">
+                        <i class="fas fa-moon"></i>
+                    </button>
                     <span id="user-info" class="text-sm">Admin</span>
                 </div>
             </div>
