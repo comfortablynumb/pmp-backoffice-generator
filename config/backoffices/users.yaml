@@ -1,0 +1,242 @@
+id: "users-backoffice"
+name: "User Management"
+description: "Manage users and their permissions"
+
+data_sources:
+  users-api:
+    type: api
+    base_url: "https://jsonplaceholder.typicode.com"
+    headers:
+      Content-Type: "application/json"
+
+sections:
+  - id: "users"
+    name: "Users"
+    icon: "fa-users"
+    actions:
+      - id: "list-users"
+        name: "List Users"
+        action_type: list
+        data_source: "users-api"
+        endpoint: "users"
+        required_scopes: ["users:read"]
+        fields:
+          - id: "id"
+            name: "ID"
+            field_type: number
+            required: false
+            editable: false
+            visible: true
+
+          - id: "name"
+            name: "Name"
+            field_type: text
+            required: true
+            editable: true
+            visible: true
+            validation:
+              min_length: 3
+              max_length: 100
+
+          - id: "email"
+            name: "Email"
+            field_type: email
+            required: true
+            editable: true
+            visible: true
+            validation:
+              pattern: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+
+          - id: "username"
+            name: "Username"
+            field_type: text
+            required: true
+            editable: true
+            visible: true
+            validation:
+              min_length: 3
+              max_length: 50
+
+          - id: "phone"
+            name: "Phone"
+            field_type: text
+            required: false
+            editable: true
+            visible: true
+
+          - id: "website"
+            name: "Website"
+            field_type: text
+            required: false
+            editable: true
+            visible: false
+
+      - id: "create-user"
+        name: "Create User"
+        action_type: create
+        data_source: "users-api"
+        endpoint: "users"
+        required_scopes: ["users:write"]
+        fields:
+          - id: "name"
+            name: "Name"
+            field_type: text
+            required: true
+            editable: true
+            visible: true
+            validation:
+              min_length: 3
+              max_length: 100
+
+          - id: "email"
+            name: "Email"
+            field_type: email
+            required: true
+            editable: true
+            visible: true
+
+          - id: "username"
+            name: "Username"
+            field_type: text
+            required: true
+            editable: true
+            visible: true
+            validation:
+              min_length: 3
+              max_length: 50
+
+          - id: "phone"
+            name: "Phone"
+            field_type: text
+            required: false
+            editable: true
+            visible: true
+
+          - id: "website"
+            name: "Website"
+            field_type: text
+            required: false
+            editable: true
+            visible: true
+
+      - id: "update-user"
+        name: "Update User"
+        action_type: update
+        data_source: "users-api"
+        endpoint: "users"
+        required_scopes: ["users:write"]
+        fields:
+          - id: "id"
+            name: "ID"
+            field_type: number
+            required: true
+            editable: false
+            visible: true
+
+          - id: "name"
+            name: "Name"
+            field_type: text
+            required: true
+            editable: true
+            visible: true
+
+          - id: "email"
+            name: "Email"
+            field_type: email
+            required: true
+            editable: true
+            visible: true
+
+          - id: "username"
+            name: "Username"
+            field_type: text
+            required: true
+            editable: true
+            visible: true
+
+          - id: "phone"
+            name: "Phone"
+            field_type: text
+            required: false
+            editable: true
+            visible: true
+
+      - id: "delete-user"
+        name: "Delete User"
+        action_type: delete
+        data_source: "users-api"
+        endpoint: "users"
+        required_scopes: ["users:delete"]
+        fields: []
+
+  - id: "posts"
+    name: "Posts"
+    icon: "fa-file-alt"
+    actions:
+      - id: "list-posts"
+        name: "List Posts"
+        action_type: list
+        data_source: "users-api"
+        endpoint: "posts"
+        required_scopes: ["posts:read"]
+        fields:
+          - id: "id"
+            name: "ID"
+            field_type: number
+            required: false
+            editable: false
+            visible: true
+
+          - id: "userId"
+            name: "User ID"
+            field_type: number
+            required: true
+            editable: true
+            visible: true
+
+          - id: "title"
+            name: "Title"
+            field_type: text
+            required: true
+            editable: true
+            visible: true
+            validation:
+              min_length: 5
+              max_length: 200
+
+          - id: "body"
+            name: "Content"
+            field_type: textarea
+            required: true
+            editable: true
+            visible: true
+            validation:
+              min_length: 10
+
+      - id: "create-post"
+        name: "Create Post"
+        action_type: create
+        data_source: "users-api"
+        endpoint: "posts"
+        required_scopes: ["posts:write"]
+        fields:
+          - id: "userId"
+            name: "User ID"
+            field_type: number
+            required: true
+            editable: true
+            visible: true
+
+          - id: "title"
+            name: "Title"
+            field_type: text
+            required: true
+            editable: true
+            visible: true
+
+          - id: "body"
+            name: "Content"
+            field_type: textarea
+            required: true
+            editable: true
+            visible: true
