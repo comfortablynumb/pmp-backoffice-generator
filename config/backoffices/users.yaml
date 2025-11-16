@@ -1,0 +1,286 @@
+id: "users-backoffice"
+name: "User Management"
+description: "Manage users and their permissions"
+
+data_sources:
+  users-api:
+    type: api
+    base_url: "https://jsonplaceholder.typicode.com"
+    headers:
+      Content-Type: "application/json"
+
+sections:
+  - id: "users"
+    name: "Users"
+    icon: "fa-users"
+    actions:
+      - id: "list-users"
+        name: "List Users"
+        type: list
+        data_source: "users-api"
+        endpoint: "users"
+        required_scopes: ["users:read"]
+        fields:
+          - id: "id"
+            name: "ID"
+            field_type: number
+            config:
+              min: 0
+            editable: false
+            visible: true
+
+          - id: "name"
+            name: "Name"
+            field_type: text
+            config:
+              min_length: 3
+              max_length: 100
+            required: true
+            visible: true
+
+          - id: "email"
+            name: "Email"
+            field_type: email
+            config:
+              pattern: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+            required: true
+            visible: true
+
+          - id: "username"
+            name: "Username"
+            field_type: text
+            config:
+              min_length: 3
+              max_length: 50
+            required: true
+            visible: true
+
+          - id: "phone"
+            name: "Phone"
+            field_type: text
+            config: {}
+            visible: true
+
+          - id: "website"
+            name: "Website"
+            field_type: text
+            config: {}
+            visible: false
+        config:
+          enable_pagination: true
+          page_size: 10
+          filters:
+            - id: "name-filter"
+              name: "Name"
+              field: "name"
+              filter_type: text
+            - id: "email-filter"
+              name: "Email"
+              field: "email"
+              filter_type: text
+          sortable_fields: ["name", "email", "username"]
+          default_sort_field: "name"
+          default_sort_order: ascending
+
+      - id: "create-user"
+        name: "Create User"
+        type: form
+        data_source: "users-api"
+        endpoint: "users"
+        required_scopes: ["users:write"]
+        fields:
+          - id: "name"
+            name: "Full Name"
+            field_type: text
+            config:
+              min_length: 3
+              max_length: 100
+            required: true
+            placeholder: "John Doe"
+            help_text: "Enter the user's full name"
+
+          - id: "email"
+            name: "Email Address"
+            field_type: email
+            config:
+              pattern: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+            required: true
+            placeholder: "[email protected]"
+            help_text: "User's email address"
+
+          - id: "username"
+            name: "Username"
+            field_type: text
+            config:
+              min_length: 3
+              max_length: 50
+            required: true
+            placeholder: "johndoe"
+            help_text: "Unique username for login"
+
+          - id: "phone"
+            name: "Phone Number"
+            field_type: text
+            config: {}
+            placeholder: "+1 (555) 123-4567"
+
+          - id: "website"
+            name: "Website"
+            field_type: text
+            config: {}
+            placeholder: "https://example.com"
+        config:
+          form_mode: create
+          submit_button_text: "Create User"
+          cancel_button_text: "Cancel"
+          show_success_message: true
+
+      - id: "update-user"
+        name: "Update User"
+        type: form
+        data_source: "users-api"
+        endpoint: "users"
+        required_scopes: ["users:write"]
+        fields:
+          - id: "id"
+            name: "ID"
+            field_type: number
+            config: {}
+            required: true
+            editable: false
+            visible: true
+
+          - id: "name"
+            name: "Full Name"
+            field_type: text
+            config:
+              min_length: 3
+              max_length: 100
+            required: true
+
+          - id: "email"
+            name: "Email Address"
+            field_type: email
+            config: {}
+            required: true
+
+          - id: "username"
+            name: "Username"
+            field_type: text
+            config:
+              min_length: 3
+              max_length: 50
+            required: true
+
+          - id: "phone"
+            name: "Phone Number"
+            field_type: text
+            config: {}
+        config:
+          form_mode: update
+          submit_button_text: "Update User"
+          show_success_message: true
+
+      - id: "delete-user"
+        name: "Delete User"
+        type: form
+        data_source: "users-api"
+        endpoint: "users"
+        required_scopes: ["users:delete"]
+        fields: []
+        config:
+          form_mode: delete
+
+  - id: "posts"
+    name: "Posts"
+    icon: "fa-file-alt"
+    actions:
+      - id: "list-posts"
+        name: "List Posts"
+        type: list
+        data_source: "users-api"
+        endpoint: "posts"
+        required_scopes: ["posts:read"]
+        fields:
+          - id: "id"
+            name: "ID"
+            field_type: number
+            config: {}
+            editable: false
+            visible: true
+
+          - id: "userId"
+            name: "User ID"
+            field_type: number
+            config:
+              min: 1
+            required: true
+            visible: true
+
+          - id: "title"
+            name: "Title"
+            field_type: text
+            config:
+              min_length: 5
+              max_length: 200
+            required: true
+            visible: true
+
+          - id: "body"
+            name: "Content"
+            field_type: textarea
+            config:
+              min_length: 10
+              rows: 3
+            required: true
+            visible: true
+        config:
+          enable_pagination: true
+          page_size: 15
+          filters:
+            - id: "user-filter"
+              name: "User ID"
+              field: "userId"
+              filter_type: number
+            - id: "title-filter"
+              name: "Title"
+              field: "title"
+              filter_type: text
+
+      - id: "create-post"
+        name: "Create Post"
+        type: form
+        data_source: "users-api"
+        endpoint: "posts"
+        required_scopes: ["posts:write"]
+        fields:
+          - id: "userId"
+            name: "User ID"
+            field_type: number
+            config:
+              min: 1
+            required: true
+            help_text: "ID of the user creating this post"
+
+          - id: "title"
+            name: "Post Title"
+            field_type: text
+            config:
+              min_length: 5
+              max_length: 200
+            required: true
+            placeholder: "Enter a compelling title"
+
+          - id: "body"
+            name: "Post Content"
+            field_type: textarea
+            config:
+              min_length: 10
+              rows: 6
+            required: true
+            placeholder: "Write your post content here..."
+            help_text: "Minimum 10 characters"
+        config:
+          form_mode: create
+          submit_button_text: "Publish Post"
+          show_success_message: true

@@ -1,0 +1,400 @@
+id: "extended-features"
+name: "Extended Features Demo"
+description: "Demonstration of extended field types, validations, and data sources"
+
+data_sources:
+  graphql-api:
+    type: graphql
+    endpoint: "https://api.example.com/graphql"
+    headers:
+      Content-Type: "application/json"
+
+  mongo-db:
+    type: mongodb
+    connection_string: "mongodb://localhost:27017"
+    database: "backoffice_db"
+    collection: "items"
+
+  redis-cache:
+    type: redis
+    connection_string: "redis://localhost:6379"
+    key_prefix: "backoffice:"
+
+  elastic-search:
+    type: elasticsearch
+    nodes:
+      - "http://localhost:9200"
+    index: "backoffice-data"
+
+sections:
+  - id: "new-field-types"
+    name: "New Field Types"
+    icon: "fa-puzzle-piece"
+    actions:
+      - id: "extended-form"
+        name: "Extended Field Demo"
+        type: form
+        data_source: "graphql-api"
+        endpoint: "createItem"
+        required_scopes: []
+        fields:
+          # Slug field - auto-generated URL-friendly string
+          - id: "slug"
+            name: "URL Slug"
+            field_type: slug
+            config:
+              source_field: "title"
+              separator: "-"
+              lowercase: true
+              max_length: 100
+              allow_unicode: false
+            placeholder: "auto-generated-from-title"
+            help_text: "URL-friendly identifier"
+
+          # Weekday selector
+          - id: "available_days"
+            name: "Available Weekdays"
+            field_type: weekday
+            config:
+              format: long
+              start_day: "monday"
+              multiple: true
+            required: true
+            help_text: "Select days when service is available"
+
+          # Month selector
+          - id: "billing_month"
+            name: "Billing Month"
+            field_type: month
+            config:
+              format: long
+              multiple: false
+            required: true
+            help_text: "Select billing month"
+
+          # Geolocation - lat/lng coordinates
+          - id: "location"
+            name: "Location"
+            field_type: geolocation
+            config:
+              enable_map: true
+              default_zoom: 13
+              min_lat: -90.0
+              max_lat: 90.0
+              min_lng: -180.0
+              max_lng: 180.0
+              enable_geocoding: true
+            required: true
+            help_text: "Enter latitude and longitude"
+
+          # Duration - time period
+          - id: "session_duration"
+            name: "Session Duration"
+            field_type: duration
+            config:
+              format: hoursminutes
+              min_duration: 15
+              max_duration: 480
+              step_minutes: 15
+            required: true
+            default_value: 60
+            help_text: "Duration in hours and minutes"
+
+          # Percentage field
+          - id: "discount"
+            name: "Discount Percentage"
+            field_type: percentage
+            config:
+              min: 0.0
+              max: 100.0
+              step: 0.5
+              decimal_places: 1
+              show_slider: false
+            required: true
+            default_value: 10
+            help_text: "Discount percentage (0-100%)"
+            validations:
+              - rule_type:
+                  type: "min"
+                  value: 0
+                message: "Discount cannot be negative"
+              - rule_type:
+                  type: "max"
+                  value: 100
+                message: "Discount cannot exceed 100%"
+
+          # Code editor field
+          - id: "custom_script"
+            name: "Custom JavaScript"
+            field_type: code
+            config:
+              language: "javascript"
+              theme: github
+              line_numbers: true
+              min_lines: 10
+              max_lines: 100
+              read_only: false
+            help_text: "Enter custom JavaScript code"
+
+          # Markdown editor
+          - id: "description_md"
+            name: "Description (Markdown)"
+            field_type: markdown
+            config:
+              min_length: 20
+              max_length: 5000
+              enable_preview: true
+              enable_toolbar: true
+              allowed_elements: null
+            required: true
+            help_text: "Markdown-formatted description"
+
+          # Rich text editor
+          - id: "content"
+            name: "Page Content"
+            field_type: richtext
+            config:
+              min_length: 50
+              max_length: 10000
+              toolbar_items:
+                - "bold"
+                - "italic"
+                - "underline"
+                - "list"
+                - "link"
+              allow_images: true
+              allow_links: true
+              allow_tables: true
+            required: true
+            help_text: "Rich text content with formatting"
+
+          # IP Address field
+          - id: "server_ip"
+            name: "Server IP Address"
+            field_type: ipaddress
+            config:
+              version: v4
+              allow_private: true
+              allow_loopback: false
+            required: true
+            placeholder: "192.168.1.1"
+            help_text: "IPv4 address"
+            validations:
+              - rule_type:
+                  type: "ipv4"
+                message: "Must be a valid IPv4 address"
+
+        config:
+          form_mode: create
+          submit_button_text: "Create Item"
+          cancel_button_text: "Cancel"
+          show_success_message: true
+
+  - id: "advanced-validations"
+    name: "Advanced Validations"
+    icon: "fa-shield-alt"
+    actions:
+      - id: "validation-demo"
+        name: "Validation Examples"
+        type: form
+        data_source: "mongo-db"
+        query: "insert"
+        required_scopes: []
+        fields:
+          # Credit card validation
+          - id: "credit_card"
+            name: "Credit Card Number"
+            field_type: text
+            config:
+              min_length: 13
+              max_length: 19
+              pattern: "^[0-9]{13,19}$"
+            placeholder: "1234 5678 9012 3456"
+            help_text: "Enter credit card number"
+            validations:
+              - rule_type:
+                  type: "credit_card"
+                message: "Invalid credit card number"
+              - rule_type:
+                  type: "luhn"
+                message: "Credit card number failed Luhn check"
+
+          # IPv4 validation
+          - id: "ipv4_address"
+            name: "IPv4 Address"
+            field_type: ipaddress
+            config:
+              version: v4
+              allow_private: false
+              allow_loopback: false
+            validations:
+              - rule_type:
+                  type: "ipv4"
+                message: "Must be a valid public IPv4 address"
+
+          # IPv6 validation
+          - id: "ipv6_address"
+            name: "IPv6 Address"
+            field_type: ipaddress
+            config:
+              version: v6
+              allow_private: true
+              allow_loopback: false
+            validations:
+              - rule_type:
+                  type: "ipv6"
+                message: "Must be a valid IPv6 address"
+
+          # UUID validation
+          - id: "resource_id"
+            name: "Resource UUID"
+            field_type: text
+            config:
+              pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            placeholder: "123e4567-e89b-12d3-a456-426614174000"
+            help_text: "UUID v4 format"
+            validations:
+              - rule_type:
+                  type: "uuid"
+                message: "Must be a valid UUID"
+
+          # Date range validation
+          - id: "start_date"
+            name: "Start Date"
+            field_type: date
+            config:
+              min_date: "2024-01-01"
+              format: "YYYY-MM-DD"
+            required: true
+
+          - id: "end_date"
+            name: "End Date"
+            field_type: date
+            config:
+              min_date: "2024-01-01"
+              format: "YYYY-MM-DD"
+            required: true
+            validations:
+              - rule_type:
+                  type: "date_range"
+                  start_field: "start_date"
+                  end_field: "end_date"
+                message: "End date must be after start date"
+
+          # File size validation
+          - id: "document"
+            name: "Document Upload"
+            field_type: file
+            config:
+              accepted_types: ["pdf", "doc", "docx"]
+              max_size_mb: 10.0
+              multiple: false
+            validations:
+              - rule_type:
+                  type: "file_size"
+                  max_size_mb: 10.0
+                message: "File size must not exceed 10MB"
+              - rule_type:
+                  type: "file_type"
+                  allowed_types: ["pdf", "doc", "docx"]
+                message: "Only PDF and Word documents are allowed"
+
+          # Strong password validation
+          - id: "new_password"
+            name: "New Password"
+            field_type: password
+            config:
+              min_length: 12
+              max_length: 128
+            required: true
+            validations:
+              - rule_type:
+                  type: "strong_password"
+                  min_length: 12
+                  require_uppercase: true
+                  require_lowercase: true
+                  require_number: true
+                  require_special: true
+                message: "Password must be at least 12 characters with uppercase, lowercase, number, and special character"
+
+          # Alphanumeric validation
+          - id: "username"
+            name: "Username"
+            field_type: text
+            config:
+              min_length: 3
+              max_length: 20
+            required: true
+            validations:
+              - rule_type:
+                  type: "alpha_numeric"
+                message: "Username must contain only letters and numbers"
+
+          # MAC address validation
+          - id: "mac_address"
+            name: "MAC Address"
+            field_type: text
+            config:
+              pattern: "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"
+            placeholder: "00:1B:44:11:3A:B7"
+            help_text: "Device MAC address"
+            validations:
+              - rule_type:
+                  type: "mac_address"
+                message: "Must be a valid MAC address (XX:XX:XX:XX:XX:XX)"
+
+        config:
+          form_mode: create
+          submit_button_text: "Submit with Validations"
+          show_success_message: true
+
+  - id: "graphql-data"
+    name: "GraphQL Data"
+    icon: "fa-project-diagram"
+    actions:
+      - id: "query-graphql"
+        name: "Query GraphQL"
+        type: list
+        data_source: "graphql-api"
+        query: |
+          query GetItems($limit: Int) {
+            items(limit: $limit) {
+              id
+              name
+              description
+              createdAt
+            }
+          }
+        required_scopes: []
+        fields:
+          - id: "id"
+            name: "ID"
+            field_type: text
+            config: {}
+            visible: true
+
+          - id: "name"
+            name: "Name"
+            field_type: text
+            config: {}
+            visible: true
+
+          - id: "description"
+            name: "Description"
+            field_type: textarea
+            config: {}
+            visible: true
+
+          - id: "createdAt"
+            name: "Created"
+            field_type: datetime
+            config: {}
+            visible: true
+
+        config:
+          enable_pagination: true
+          page_size: 20
+          filters: []
+          sortable_fields: ["name", "createdAt"]
+          default_sort_field: "createdAt"
+          default_sort_order: descending
