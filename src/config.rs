@@ -71,6 +71,45 @@ pub enum DataSourceConfig {
         index: String,
         auth: Option<ApiAuthConfig>,
     },
+    #[serde(rename = "grpc")]
+    Grpc {
+        endpoint: String,
+        proto_file: String,
+        service_name: String,
+        tls_enabled: bool,
+    },
+    #[serde(rename = "kafka")]
+    Kafka {
+        brokers: Vec<String>,
+        topic: String,
+        group_id: String,
+    },
+    #[serde(rename = "s3")]
+    S3 {
+        bucket: String,
+        region: String,
+        access_key: Option<String>,
+        secret_key: Option<String>,
+        prefix: Option<String>,
+    },
+    #[serde(rename = "firebase")]
+    Firebase {
+        project_id: String,
+        collection: String,
+        credentials_path: Option<String>,
+    },
+    #[serde(rename = "supabase")]
+    Supabase {
+        url: String,
+        api_key: String,
+        table: String,
+    },
+    #[serde(rename = "websocket")]
+    WebSocket {
+        url: String,
+        reconnect: bool,
+        heartbeat_interval: Option<u32>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -389,6 +428,46 @@ pub enum FieldType {
     IpAddress {
         #[serde(default)]
         config: IpAddressFieldConfig,
+    },
+    MultiCheckbox {
+        #[serde(default)]
+        config: MultiCheckboxFieldConfig,
+    },
+    Radio {
+        #[serde(default)]
+        config: RadioFieldConfig,
+    },
+    Autocomplete {
+        #[serde(default)]
+        config: AutocompleteFieldConfig,
+    },
+    Signature {
+        #[serde(default)]
+        config: SignatureFieldConfig,
+    },
+    Video {
+        #[serde(default)]
+        config: VideoFieldConfig,
+    },
+    Audio {
+        #[serde(default)]
+        config: AudioFieldConfig,
+    },
+    Barcode {
+        #[serde(default)]
+        config: BarcodeFieldConfig,
+    },
+    DateTimeRange {
+        #[serde(default)]
+        config: DateTimeRangeFieldConfig,
+    },
+    Slider {
+        #[serde(default)]
+        config: SliderFieldConfig,
+    },
+    ColorPalette {
+        #[serde(default)]
+        config: ColorPaletteFieldConfig,
     },
 }
 
@@ -1087,6 +1166,255 @@ impl Default for IpAddressFieldConfig {
     }
 }
 
+/// Multi-checkbox field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MultiCheckboxFieldConfig {
+    pub options: Vec<CheckboxOption>,
+    pub min_selections: Option<usize>,
+    pub max_selections: Option<usize>,
+    pub layout: CheckboxLayout,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CheckboxOption {
+    pub value: String,
+    pub label: String,
+    pub disabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CheckboxLayout {
+    Vertical,
+    Horizontal,
+    Grid,
+}
+
+impl Default for MultiCheckboxFieldConfig {
+    fn default() -> Self {
+        Self {
+            options: Vec::new(),
+            min_selections: None,
+            max_selections: None,
+            layout: CheckboxLayout::Vertical,
+        }
+    }
+}
+
+/// Radio field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RadioFieldConfig {
+    pub options: Vec<RadioOption>,
+    pub layout: RadioLayout,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RadioOption {
+    pub value: String,
+    pub label: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RadioLayout {
+    Vertical,
+    Horizontal,
+    Cards,
+}
+
+impl Default for RadioFieldConfig {
+    fn default() -> Self {
+        Self {
+            options: Vec::new(),
+            layout: RadioLayout::Vertical,
+        }
+    }
+}
+
+/// Autocomplete field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutocompleteFieldConfig {
+    pub options: Vec<String>,
+    pub min_chars: usize,
+    pub max_results: usize,
+    pub allow_custom: bool,
+    pub case_sensitive: bool,
+}
+
+impl Default for AutocompleteFieldConfig {
+    fn default() -> Self {
+        Self {
+            options: Vec::new(),
+            min_chars: 1,
+            max_results: 10,
+            allow_custom: false,
+            case_sensitive: false,
+        }
+    }
+}
+
+/// Signature field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignatureFieldConfig {
+    pub width: u32,
+    pub height: u32,
+    pub pen_color: String,
+    pub background_color: String,
+    pub line_width: u8,
+}
+
+impl Default for SignatureFieldConfig {
+    fn default() -> Self {
+        Self {
+            width: 400,
+            height: 200,
+            pen_color: "#000000".to_string(),
+            background_color: "#FFFFFF".to_string(),
+            line_width: 2,
+        }
+    }
+}
+
+/// Video field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoFieldConfig {
+    pub max_size_mb: Option<f64>,
+    pub accepted_formats: Option<Vec<String>>,
+    pub max_duration_seconds: Option<u32>,
+    pub enable_preview: bool,
+    pub multiple: bool,
+}
+
+impl Default for VideoFieldConfig {
+    fn default() -> Self {
+        Self {
+            max_size_mb: Some(100.0),
+            accepted_formats: Some(vec!["mp4".to_string(), "webm".to_string(), "ogg".to_string()]),
+            max_duration_seconds: None,
+            enable_preview: true,
+            multiple: false,
+        }
+    }
+}
+
+/// Audio field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioFieldConfig {
+    pub max_size_mb: Option<f64>,
+    pub accepted_formats: Option<Vec<String>>,
+    pub max_duration_seconds: Option<u32>,
+    pub enable_preview: bool,
+    pub multiple: bool,
+}
+
+impl Default for AudioFieldConfig {
+    fn default() -> Self {
+        Self {
+            max_size_mb: Some(50.0),
+            accepted_formats: Some(vec!["mp3".to_string(), "wav".to_string(), "ogg".to_string()]),
+            max_duration_seconds: None,
+            enable_preview: true,
+            multiple: false,
+        }
+    }
+}
+
+/// Barcode field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BarcodeFieldConfig {
+    pub format: BarcodeFormat,
+    pub enable_scanner: bool,
+    pub validation_pattern: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BarcodeFormat {
+    Qr,
+    Ean13,
+    Ean8,
+    Upca,
+    Code128,
+    Code39,
+}
+
+impl Default for BarcodeFieldConfig {
+    fn default() -> Self {
+        Self {
+            format: BarcodeFormat::Qr,
+            enable_scanner: false,
+            validation_pattern: None,
+        }
+    }
+}
+
+/// Date/Time range field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DateTimeRangeFieldConfig {
+    pub include_time: bool,
+    pub min_date: Option<String>,
+    pub max_date: Option<String>,
+    pub min_range_days: Option<u32>,
+    pub max_range_days: Option<u32>,
+}
+
+impl Default for DateTimeRangeFieldConfig {
+    fn default() -> Self {
+        Self {
+            include_time: false,
+            min_date: None,
+            max_date: None,
+            min_range_days: None,
+            max_range_days: None,
+        }
+    }
+}
+
+/// Slider field configuration (multi-value)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SliderFieldConfig {
+    pub min: f64,
+    pub max: f64,
+    pub step: f64,
+    pub handles: usize,
+    pub show_values: bool,
+    pub show_ticks: bool,
+    pub range_mode: bool,
+}
+
+impl Default for SliderFieldConfig {
+    fn default() -> Self {
+        Self {
+            min: 0.0,
+            max: 100.0,
+            step: 1.0,
+            handles: 2,
+            show_values: true,
+            show_ticks: false,
+            range_mode: true,
+        }
+    }
+}
+
+/// Color palette field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ColorPaletteFieldConfig {
+    pub max_colors: usize,
+    pub default_colors: Option<Vec<String>>,
+    pub allow_custom: bool,
+}
+
+impl Default for ColorPaletteFieldConfig {
+    fn default() -> Self {
+        Self {
+            max_colors: 5,
+            default_colors: None,
+            allow_custom: true,
+        }
+    }
+}
+
 /// Custom validation rule
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationRule {
@@ -1156,6 +1484,29 @@ pub enum ValidationType {
     AlphaNumeric,
     Luhn,
     MacAddress,
+    Isbn,
+    Iban,
+    Ssn,
+    PostalCode {
+        country_code: String,
+    },
+    Base64,
+    Json,
+    Hex,
+    Ascii,
+    NotEmpty,
+    Future,
+    Past,
+    MinAge {
+        years: u8,
+    },
+    MaxAge {
+        years: u8,
+    },
+    Between {
+        min: f64,
+        max: f64,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

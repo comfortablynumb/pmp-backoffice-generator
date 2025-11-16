@@ -1175,6 +1175,312 @@ function createFieldInput(field, value) {
             }
             break;
 
+        case 'multicheckbox':
+            const $checkboxWrapper = $('<div>').addClass('space-y-2');
+            const checkboxLayout = field.config?.layout || 'vertical';
+            const layoutClass = checkboxLayout === 'horizontal' ? 'flex flex-wrap gap-4' : checkboxLayout === 'grid' ? 'grid grid-cols-2 gap-2' : 'space-y-2';
+
+            const $checkboxContainer = $('<div>').addClass(layoutClass);
+            $input = $('<input>')
+                .attr('type', 'hidden')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .val(Array.isArray(value) ? value.join(',') : value || '');
+
+            if (field.config?.options) {
+                field.config.options.forEach(option => {
+                    const isChecked = Array.isArray(value) ? value.includes(option.value) : false;
+                    const $checkboxLabel = $('<label>').addClass('flex items-center space-x-2 cursor-pointer');
+                    const $checkbox = $('<input>')
+                        .attr('type', 'checkbox')
+                        .attr('value', option.value)
+                        .addClass('h-4 w-4 text-indigo-600 border-gray-300 rounded')
+                        .prop('checked', isChecked)
+                        .prop('disabled', option.disabled || false)
+                        .on('change', function() {
+                            updateMultiCheckboxValue($checkboxContainer, $input);
+                        });
+
+                    $checkboxLabel.append($checkbox).append($('<span>').addClass('text-sm text-gray-700').text(option.label));
+                    $checkboxContainer.append($checkboxLabel);
+                });
+            }
+
+            $checkboxWrapper.append($checkboxContainer).append($input);
+            $input = $checkboxWrapper;
+            break;
+
+        case 'radio':
+            const $radioWrapper = $('<div>').addClass('space-y-2');
+            const radioLayout = field.config?.layout || 'vertical';
+            const radioLayoutClass = radioLayout === 'horizontal' ? 'flex flex-wrap gap-4' : radioLayout === 'cards' ? 'grid grid-cols-2 gap-2' : 'space-y-2';
+
+            const $radioContainer = $('<div>').addClass(radioLayoutClass);
+
+            if (field.config?.options) {
+                field.config.options.forEach(option => {
+                    const $radioLabel = $('<label>').addClass('flex items-start space-x-2 cursor-pointer p-2 border border-gray-200 rounded hover:bg-gray-50');
+                    const $radio = $('<input>')
+                        .attr('type', 'radio')
+                        .attr('name', field.id)
+                        .attr('id', field.id)
+                        .attr('value', option.value)
+                        .addClass('h-4 w-4 text-indigo-600 border-gray-300 mt-0.5')
+                        .prop('checked', option.value === value);
+
+                    const $labelText = $('<div>');
+                    $labelText.append($('<span>').addClass('block text-sm font-medium text-gray-700').text(option.label));
+                    if (option.description) {
+                        $labelText.append($('<span>').addClass('block text-xs text-gray-500').text(option.description));
+                    }
+
+                    $radioLabel.append($radio).append($labelText);
+                    $radioContainer.append($radioLabel);
+                });
+            }
+
+            $radioWrapper.append($radioContainer);
+            $input = $radioWrapper;
+            break;
+
+        case 'autocomplete':
+            const $autocompleteWrapper = $('<div>').addClass('relative');
+            $input = $('<input>')
+                .attr('type', 'text')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                .val(value)
+                .attr('autocomplete', 'off');
+
+            const $suggestionsList = $('<ul>')
+                .attr('id', field.id + '-suggestions')
+                .addClass('absolute z-10 w-full bg-white border border-gray-300 rounded-md shadow-lg mt-1 max-h-60 overflow-y-auto hidden');
+
+            $input.on('input', function() {
+                const inputVal = $(this).val().toLowerCase();
+                const minChars = field.config?.min_chars || 1;
+
+                if (inputVal.length < minChars) {
+                    $suggestionsList.addClass('hidden');
+                    return;
+                }
+
+                const maxResults = field.config?.max_results || 10;
+                const caseSensitive = field.config?.case_sensitive || false;
+                const options = field.config?.options || [];
+
+                const filtered = options.filter(opt => {
+                    const optVal = caseSensitive ? opt : opt.toLowerCase();
+                    const searchVal = caseSensitive ? inputVal : inputVal.toLowerCase();
+                    return optVal.includes(searchVal);
+                }).slice(0, maxResults);
+
+                $suggestionsList.empty();
+                if (filtered.length > 0) {
+                    filtered.forEach(opt => {
+                        const $li = $('<li>')
+                            .addClass('px-3 py-2 cursor-pointer hover:bg-indigo-50')
+                            .text(opt)
+                            .click(function() {
+                                $input.val(opt);
+                                $suggestionsList.addClass('hidden');
+                            });
+                        $suggestionsList.append($li);
+                    });
+                    $suggestionsList.removeClass('hidden');
+                } else {
+                    $suggestionsList.addClass('hidden');
+                }
+            });
+
+            $autocompleteWrapper.append($input).append($suggestionsList);
+            $input = $autocompleteWrapper;
+            break;
+
+        case 'signature':
+            const $signatureWrapper = $('<div>');
+            const width = field.config?.width || 400;
+            const height = field.config?.height || 200;
+
+            const $canvas = $('<canvas>')
+                .attr('id', field.id + '-canvas')
+                .attr('width', width)
+                .attr('height', height)
+                .addClass('border border-gray-300 rounded cursor-crosshair');
+
+            $input = $('<input>')
+                .attr('type', 'hidden')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .val(value || '');
+
+            const $clearBtn = $('<button>')
+                .attr('type', 'button')
+                .addClass('mt-2 px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm')
+                .text('Clear Signature')
+                .click(function() {
+                    const canvas = document.getElementById(field.id + '-canvas');
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    $input.val('');
+                });
+
+            $signatureWrapper.append($canvas).append($clearBtn).append($input);
+            $input = $signatureWrapper;
+            break;
+
+        case 'video':
+            $input = $('<input>')
+                .attr('type', 'file')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .attr('accept', 'video/*')
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500');
+
+            if (field.config?.multiple) {
+                $input.attr('multiple', true);
+            }
+            if (field.config?.accepted_formats) {
+                $input.attr('accept', field.config.accepted_formats.map(f => 'video/' + f).join(','));
+            }
+            break;
+
+        case 'audio':
+            $input = $('<input>')
+                .attr('type', 'file')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .attr('accept', 'audio/*')
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500');
+
+            if (field.config?.multiple) {
+                $input.attr('multiple', true);
+            }
+            if (field.config?.accepted_formats) {
+                $input.attr('accept', field.config.accepted_formats.map(f => 'audio/' + f).join(','));
+            }
+            break;
+
+        case 'barcode':
+            $input = $('<input>')
+                .attr('type', 'text')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono')
+                .val(value);
+
+            if (field.config?.validation_pattern) {
+                $input.attr('pattern', field.config.validation_pattern);
+            }
+            break;
+
+        case 'datetimerange':
+            const $dateRangeWrapper = $('<div>').addClass('flex gap-2');
+            const includeTime = field.config?.include_time || false;
+            const inputType = includeTime ? 'datetime-local' : 'date';
+
+            const $startInput = $('<input>')
+                .attr('type', inputType)
+                .attr('id', field.id + '-start')
+                .attr('placeholder', 'Start')
+                .addClass('w-1/2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                .val(value?.start || '');
+
+            const $endInput = $('<input>')
+                .attr('type', inputType)
+                .attr('id', field.id + '-end')
+                .attr('placeholder', 'End')
+                .addClass('w-1/2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                .val(value?.end || '');
+
+            $input = $('<input>')
+                .attr('type', 'hidden')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .val(value ? JSON.stringify(value) : '');
+
+            function updateDateRangeValue() {
+                const start = $startInput.val();
+                const end = $endInput.val();
+                if (start && end) {
+                    $input.val(JSON.stringify({ start, end }));
+                }
+            }
+
+            $startInput.on('change', updateDateRangeValue);
+            $endInput.on('change', updateDateRangeValue);
+
+            $dateRangeWrapper.append($startInput).append($endInput).append($input);
+            $input = $dateRangeWrapper;
+            break;
+
+        case 'slider':
+            const $sliderWrapper = $('<div>');
+            const sliderMin = field.config?.min || 0;
+            const sliderMax = field.config?.max || 100;
+            const sliderStep = field.config?.step || 1;
+            const handles = field.config?.handles || 2;
+
+            // Simple implementation - would need a library like noUiSlider for proper multi-handle support
+            $input = $('<input>')
+                .attr('type', 'range')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .attr('min', sliderMin)
+                .attr('max', sliderMax)
+                .attr('step', sliderStep)
+                .addClass('w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer')
+                .val(value || sliderMin);
+
+            if (field.config?.show_values) {
+                const $valueDisplay = $('<span>')
+                    .attr('id', field.id + '-value')
+                    .addClass('block text-center mt-1 text-sm text-gray-600')
+                    .text(value || sliderMin);
+
+                $input.on('input', function() {
+                    $valueDisplay.text($(this).val());
+                });
+
+                $sliderWrapper.append($input).append($valueDisplay);
+                $input = $sliderWrapper;
+            }
+            break;
+
+        case 'colorpalette':
+            const $paletteWrapper = $('<div>').addClass('space-y-2');
+            const maxColors = field.config?.max_colors || 5;
+            const $colorsContainer = $('<div>').addClass('flex flex-wrap gap-2').attr('id', field.id + '-colors');
+
+            $input = $('<input>')
+                .attr('type', 'hidden')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .val(Array.isArray(value) ? value.join(',') : value || '');
+
+            const colors = Array.isArray(value) ? value : (value ? value.split(',') : field.config?.default_colors || []);
+            colors.forEach(color => {
+                if (color.trim()) {
+                    addColorToPalette(color.trim(), $colorsContainer, $input, maxColors);
+                }
+            });
+
+            const $addColorBtn = $('<button>')
+                .attr('type', 'button')
+                .addClass('px-3 py-1 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm')
+                .text('Add Color')
+                .click(function() {
+                    if ($colorsContainer.children().length < maxColors) {
+                        const newColor = '#' + Math.floor(Math.random()*16777215).toString(16);
+                        addColorToPalette(newColor, $colorsContainer, $input, maxColors);
+                    }
+                });
+
+            $paletteWrapper.append($colorsContainer).append($addColorBtn).append($input);
+            $input = $paletteWrapper;
+            break;
+
         default: // text
             $input = $('<input>')
                 .attr('type', 'text')
@@ -1265,6 +1571,31 @@ function submitForm(action, existingData = {}) {
                 } else {
                     data[field.id] = selectValue ? parseInt(selectValue) : null;
                 }
+                break;
+            case 'multicheckbox':
+                const checkboxValue = $('#' + field.id).val();
+                data[field.id] = checkboxValue ? checkboxValue.split(',') : [];
+                break;
+            case 'datetimerange':
+                try {
+                    const rangeValue = $('#' + field.id).val();
+                    data[field.id] = rangeValue ? JSON.parse(rangeValue) : null;
+                } catch (e) {
+                    console.error('Invalid date range for field ' + field.id, e);
+                    data[field.id] = null;
+                }
+                break;
+            case 'signature':
+                const signatureValue = $('#' + field.id).val();
+                data[field.id] = signatureValue || null;
+                break;
+            case 'colorpalette':
+                const paletteValue = $('#' + field.id).val();
+                data[field.id] = paletteValue ? paletteValue.split(',') : [];
+                break;
+            case 'slider':
+                const sliderValue = $('#' + field.id).val();
+                data[field.id] = sliderValue ? parseFloat(sliderValue) : 0;
                 break;
         }
     });
@@ -1426,6 +1757,61 @@ function updateTagsValue($container, $hiddenInput) {
         if (text) tags.push(text);
     });
     $hiddenInput.val(tags.join(','));
+}
+
+function updateMultiCheckboxValue($container, $hiddenInput) {
+    const selectedValues = [];
+    $container.find('input[type="checkbox"]:checked').each(function() {
+        selectedValues.push($(this).val());
+    });
+    $hiddenInput.val(selectedValues.join(','));
+}
+
+function addColorToPalette(color, $container, $hiddenInput, maxColors) {
+    if ($container.children().length >= maxColors) return;
+
+    const $colorItem = $('<div>').addClass('relative group');
+    const $colorBox = $('<div>')
+        .addClass('w-12 h-12 rounded border-2 border-gray-300 cursor-pointer')
+        .css('background-color', color)
+        .click(function() {
+            const newColor = prompt('Enter new color (hex)', color);
+            if (newColor && /^#[0-9A-Fa-f]{6}$/.test(newColor)) {
+                $(this).css('background-color', newColor);
+                updateColorPaletteValue($container, $hiddenInput);
+            }
+        });
+
+    const $removeBtn = $('<button>')
+        .attr('type', 'button')
+        .addClass('absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs opacity-0 group-hover:opacity-100 transition-opacity')
+        .html('&times;')
+        .click(function(e) {
+            e.stopPropagation();
+            $colorItem.remove();
+            updateColorPaletteValue($container, $hiddenInput);
+        });
+
+    $colorItem.append($colorBox).append($removeBtn);
+    $container.append($colorItem);
+    updateColorPaletteValue($container, $hiddenInput);
+}
+
+function updateColorPaletteValue($container, $hiddenInput) {
+    const colors = [];
+    $container.find('> div > div').each(function() {
+        const color = $(this).css('background-color');
+        // Convert RGB to hex
+        const rgb = color.match(/\d+/g);
+        if (rgb) {
+            const hex = '#' + rgb.map(x => {
+                const hex = parseInt(x).toString(16);
+                return hex.length === 1 ? '0' + hex : hex;
+            }).join('');
+            colors.push(hex);
+        }
+    });
+    $hiddenInput.val(colors.join(','));
 }
 
 function showError(message) {

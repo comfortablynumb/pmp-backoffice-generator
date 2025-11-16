@@ -1,0 +1,474 @@
+id: "all-features-demo"
+name: "All Features Showcase"
+description: "Comprehensive demonstration of all field types, validations, and data sources"
+
+data_sources:
+  # New data sources
+  grpc-service:
+    type: grpc
+    endpoint: "localhost:50051"
+    proto_file: "protos/service.proto"
+    service_name: "UserService"
+    tls_enabled: false
+
+  kafka-stream:
+    type: kafka
+    brokers:
+      - "localhost:9092"
+    topic: "backoffice-events"
+    group_id: "backoffice-group"
+
+  s3-storage:
+    type: s3
+    bucket: "backoffice-files"
+    region: "us-east-1"
+    access_key: "AKIAIOSFODNN7EXAMPLE"
+    secret_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    prefix: "uploads/"
+
+  firebase-db:
+    type: firebase
+    project_id: "my-backoffice-project"
+    collection: "users"
+    credentials_path: "/path/to/credentials.json"
+
+  supabase-backend:
+    type: supabase
+    url: "https://xxx.supabase.co"
+    api_key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    table: "profiles"
+
+  websocket-connection:
+    type: websocket
+    url: "wss://api.example.com/ws"
+    reconnect: true
+    heartbeat_interval: 30
+
+sections:
+  - id: "new-field-types-section"
+    name: "New Field Types"
+    icon: "fa-magic"
+    actions:
+      - id: "all-new-fields-form"
+        name: "All New Fields Demo"
+        type: form
+        data_source: "supabase-backend"
+        endpoint: "create"
+        required_scopes: []
+        fields:
+          # MultiCheckbox field
+          - id: "interests"
+            name: "Interests"
+            field_type: multicheckbox
+            config:
+              layout: grid
+              min_selections: 1
+              max_selections: 5
+              options:
+                - value: "sports"
+                  label: "Sports"
+                  disabled: false
+                - value: "music"
+                  label: "Music"
+                  disabled: false
+                - value: "reading"
+                  label: "Reading"
+                  disabled: false
+                - value: "travel"
+                  label: "Travel"
+                  disabled: false
+                - value: "cooking"
+                  label: "Cooking"
+                  disabled: false
+                - value: "gaming"
+                  label: "Gaming"
+                  disabled: false
+            required: true
+            help_text: "Select at least one interest"
+
+          # Radio field with cards layout
+          - id: "subscription_plan"
+            name: "Subscription Plan"
+            field_type: radio
+            config:
+              layout: cards
+              options:
+                - value: "free"
+                  label: "Free"
+                  description: "$0/month - Basic features"
+                - value: "pro"
+                  label: "Pro"
+                  description: "$19/month - Advanced features"
+                - value: "enterprise"
+                  label: "Enterprise"
+                  description: "$99/month - All features + support"
+            required: true
+            default_value: "free"
+
+          # Autocomplete field
+          - id: "country"
+            name: "Country"
+            field_type: autocomplete
+            config:
+              min_chars: 2
+              max_results: 10
+              allow_custom: false
+              case_sensitive: false
+              options:
+                - "United States"
+                - "United Kingdom"
+                - "Canada"
+                - "Australia"
+                - "Germany"
+                - "France"
+                - "Spain"
+                - "Italy"
+                - "Japan"
+                - "China"
+            required: true
+            placeholder: "Start typing..."
+
+          # Signature field
+          - id: "signature"
+            name: "Digital Signature"
+            field_type: signature
+            config:
+              width: 400
+              height: 200
+              pen_color: "#000000"
+              background_color: "#FFFFFF"
+              line_width: 2
+            required: true
+            help_text: "Please sign in the box"
+
+          # Video upload field
+          - id: "intro_video"
+            name: "Introduction Video"
+            field_type: video
+            config:
+              max_size_mb: 100.0
+              accepted_formats:
+                - "mp4"
+                - "webm"
+              max_duration_seconds: 300
+              enable_preview: true
+              multiple: false
+            help_text: "Upload a short introduction video (max 5 minutes)"
+
+          # Audio upload field
+          - id: "voice_memo"
+            name: "Voice Memo"
+            field_type: audio
+            config:
+              max_size_mb: 10.0
+              accepted_formats:
+                - "mp3"
+                - "wav"
+              max_duration_seconds: 60
+              enable_preview: true
+              multiple: false
+            help_text: "Record a voice message (max 60 seconds)"
+
+          # Barcode field
+          - id: "product_barcode"
+            name: "Product Barcode"
+            field_type: barcode
+            config:
+              format: ean13
+              enable_scanner: false
+              validation_pattern: "^[0-9]{13}$"
+            placeholder: "1234567890123"
+            help_text: "Enter 13-digit EAN barcode"
+            validations:
+              - rule_type:
+                  type: "pattern"
+                  regex: "^[0-9]{13}$"
+                message: "Barcode must be 13 digits"
+
+          # DateTime range field
+          - id: "event_period"
+            name: "Event Period"
+            field_type: datetimerange
+            config:
+              include_time: true
+              min_date: "2024-01-01"
+              max_date: "2025-12-31"
+              min_range_days: 1
+              max_range_days: 30
+            required: true
+            help_text: "Select event start and end date/time"
+
+          # Multi-value slider
+          - id: "price_range"
+            name: "Price Range"
+            field_type: slider
+            config:
+              min: 0
+              max: 1000
+              step: 10
+              handles: 2
+              show_values: true
+              show_ticks: false
+              range_mode: true
+            default_value: 50
+
+          # Color palette field
+          - id: "brand_colors"
+            name: "Brand Colors"
+            field_type: colorpalette
+            config:
+              max_colors: 5
+              default_colors:
+                - "#FF0000"
+                - "#00FF00"
+                - "#0000FF"
+              allow_custom: true
+            help_text: "Select up to 5 brand colors"
+
+        config:
+          form_mode: create
+          submit_button_text: "Create Entry"
+          show_success_message: true
+
+  - id: "new-validations-section"
+    name: "New Validations"
+    icon: "fa-check-circle"
+    actions:
+      - id: "validation-showcase"
+        name: "Validation Examples"
+        type: form
+        data_source: "firebase-db"
+        endpoint: "create"
+        required_scopes: []
+        fields:
+          # ISBN validation
+          - id: "book_isbn"
+            name: "Book ISBN"
+            field_type: text
+            config:
+              pattern: "^(97[89])?[0-9]{9}[0-9X]$"
+            placeholder: "978-3-16-148410-0"
+            validations:
+              - rule_type:
+                  type: "isbn"
+                message: "Must be a valid ISBN number"
+
+          # IBAN validation
+          - id: "bank_account"
+            name: "Bank Account (IBAN)"
+            field_type: text
+            config:
+              pattern: "^[A-Z]{2}[0-9]{2}[A-Z0-9]+$"
+            placeholder: "DE89370400440532013000"
+            validations:
+              - rule_type:
+                  type: "iban"
+                message: "Must be a valid IBAN"
+
+          # SSN validation
+          - id: "social_security"
+            name: "Social Security Number"
+            field_type: text
+            config:
+              pattern: "^[0-9]{3}-[0-9]{2}-[0-9]{4}$"
+            placeholder: "123-45-6789"
+            validations:
+              - rule_type:
+                  type: "ssn"
+                message: "Must be a valid SSN"
+
+          # Postal code validation
+          - id: "zip_code"
+            name: "ZIP Code"
+            field_type: text
+            config:
+              pattern: "^[0-9]{5}(-[0-9]{4})?$"
+            placeholder: "12345 or 12345-6789"
+            validations:
+              - rule_type:
+                  type: "postal_code"
+                  country_code: "US"
+                message: "Must be a valid US ZIP code"
+
+          # Base64 validation
+          - id: "encoded_data"
+            name: "Base64 Encoded Data"
+            field_type: textarea
+            config:
+              rows: 4
+            validations:
+              - rule_type:
+                  type: "base64"
+                message: "Must be valid Base64 encoded data"
+
+          # JSON validation
+          - id: "config_json"
+            name: "Configuration JSON"
+            field_type: textarea
+            config:
+              rows: 6
+            placeholder: '{"key": "value"}'
+            validations:
+              - rule_type:
+                  type: "json"
+                message: "Must be valid JSON"
+
+          # Hex validation
+          - id: "hex_color_code"
+            name: "Hex Color Code"
+            field_type: text
+            config:
+              pattern: "^[0-9A-Fa-f]+$"
+            placeholder: "FF5733"
+            validations:
+              - rule_type:
+                  type: "hex"
+                message: "Must be valid hexadecimal"
+
+          # ASCII validation
+          - id: "ascii_text"
+            name: "ASCII Only Text"
+            field_type: text
+            validations:
+              - rule_type:
+                  type: "ascii"
+                message: "Must contain only ASCII characters"
+
+          # Not empty validation
+          - id: "required_field"
+            name: "Required Field (Not Empty)"
+            field_type: text
+            validations:
+              - rule_type:
+                  type: "not_empty"
+                message: "This field cannot be empty or whitespace"
+
+          # Future date validation
+          - id: "appointment_date"
+            name: "Appointment Date"
+            field_type: date
+            validations:
+              - rule_type:
+                  type: "future"
+                message: "Appointment must be in the future"
+
+          # Past date validation
+          - id: "birth_date"
+            name: "Date of Birth"
+            field_type: date
+            validations:
+              - rule_type:
+                  type: "past"
+                message: "Birth date must be in the past"
+              - rule_type:
+                  type: "min_age"
+                  years: 18
+                message: "Must be at least 18 years old"
+              - rule_type:
+                  type: "max_age"
+                  years: 120
+                message: "Age cannot exceed 120 years"
+
+          # Between validation
+          - id: "rating_score"
+            name: "Rating Score"
+            field_type: number
+            config:
+              min: 0
+              max: 100
+              step: 0.1
+            validations:
+              - rule_type:
+                  type: "between"
+                  min: 0.0
+                  max: 100.0
+                message: "Score must be between 0 and 100"
+
+        config:
+          form_mode: create
+          submit_button_text: "Submit with Validations"
+          show_success_message: true
+
+  - id: "data-sources-showcase"
+    name: "Data Sources"
+    icon: "fa-database"
+    actions:
+      - id: "grpc-list"
+        name: "gRPC Data"
+        type: list
+        data_source: "grpc-service"
+        query: "ListUsers"
+        required_scopes: []
+        fields:
+          - id: "id"
+            name: "ID"
+            field_type: text
+            config: {}
+            visible: true
+
+          - id: "name"
+            name: "Name"
+            field_type: text
+            config: {}
+            visible: true
+
+        config:
+          enable_pagination: true
+          page_size: 20
+          filters: []
+          sortable_fields: ["name"]
+
+      - id: "kafka-stream-viewer"
+        name: "Kafka Stream"
+        type: list
+        data_source: "kafka-stream"
+        query: "consume"
+        required_scopes: []
+        fields:
+          - id: "key"
+            name: "Message Key"
+            field_type: text
+            config: {}
+            visible: true
+
+          - id: "value"
+            name: "Message Value"
+            field_type: json
+            config: {}
+            visible: true
+
+        config:
+          enable_pagination: false
+          page_size: 50
+          filters: []
+
+      - id: "s3-files-list"
+        name: "S3 Files"
+        type: list
+        data_source: "s3-storage"
+        query: "list-objects"
+        required_scopes: []
+        fields:
+          - id: "key"
+            name: "File Name"
+            field_type: text
+            config: {}
+            visible: true
+
+          - id: "size"
+            name: "Size (bytes)"
+            field_type: number
+            config: {}
+            visible: true
+
+          - id: "last_modified"
+            name: "Last Modified"
+            field_type: datetime
+            config: {}
+            visible: true
+
+        config:
+          enable_pagination: true
+          page_size: 25
+          filters: []
+          sortable_fields: ["key", "last_modified", "size"]

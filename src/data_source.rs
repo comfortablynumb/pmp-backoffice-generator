@@ -284,6 +284,233 @@ impl DataSource for ElasticsearchDataSource {
     }
 }
 
+/// gRPC data source
+pub struct GrpcDataSource {
+    #[allow(dead_code)]
+    endpoint: String,
+    #[allow(dead_code)]
+    proto_file: String,
+    #[allow(dead_code)]
+    service_name: String,
+    #[allow(dead_code)]
+    tls_enabled: bool,
+}
+
+impl GrpcDataSource {
+    pub fn new(endpoint: String, proto_file: String, service_name: String, tls_enabled: bool) -> Self {
+        Self {
+            endpoint,
+            proto_file,
+            service_name,
+            tls_enabled,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl DataSource for GrpcDataSource {
+    async fn execute_query(&self, method: &str, _params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
+        tracing::warn!("gRPC query execution not yet fully implemented: {}", method);
+        Ok(vec![])
+    }
+
+    async fn execute_mutation(&self, method: &str, _data: &HashMap<String, Value>) -> Result<Value> {
+        tracing::warn!("gRPC mutation execution not yet fully implemented: {}", method);
+        Ok(Value::Bool(true))
+    }
+}
+
+/// Kafka data source
+pub struct KafkaDataSource {
+    #[allow(dead_code)]
+    brokers: Vec<String>,
+    #[allow(dead_code)]
+    topic: String,
+    #[allow(dead_code)]
+    group_id: String,
+}
+
+impl KafkaDataSource {
+    pub fn new(brokers: Vec<String>, topic: String, group_id: String) -> Self {
+        Self {
+            brokers,
+            topic,
+            group_id,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl DataSource for KafkaDataSource {
+    async fn execute_query(&self, query: &str, _params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
+        tracing::warn!("Kafka query execution not yet fully implemented: {}", query);
+        Ok(vec![])
+    }
+
+    async fn execute_mutation(&self, message: &str, _data: &HashMap<String, Value>) -> Result<Value> {
+        tracing::warn!("Kafka mutation execution not yet fully implemented: {}", message);
+        Ok(Value::Bool(true))
+    }
+}
+
+/// S3 data source
+pub struct S3DataSource {
+    #[allow(dead_code)]
+    bucket: String,
+    #[allow(dead_code)]
+    region: String,
+    #[allow(dead_code)]
+    prefix: Option<String>,
+}
+
+impl S3DataSource {
+    pub fn new(bucket: String, region: String, prefix: Option<String>) -> Self {
+        Self {
+            bucket,
+            region,
+            prefix,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl DataSource for S3DataSource {
+    async fn execute_query(&self, key: &str, _params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
+        tracing::warn!("S3 query execution not yet fully implemented: {}", key);
+        Ok(vec![])
+    }
+
+    async fn execute_mutation(&self, key: &str, _data: &HashMap<String, Value>) -> Result<Value> {
+        tracing::warn!("S3 mutation execution not yet fully implemented: {}", key);
+        Ok(Value::Bool(true))
+    }
+}
+
+/// Firebase data source
+pub struct FirebaseDataSource {
+    #[allow(dead_code)]
+    project_id: String,
+    #[allow(dead_code)]
+    collection: String,
+}
+
+impl FirebaseDataSource {
+    pub fn new(project_id: String, collection: String) -> Self {
+        Self {
+            project_id,
+            collection,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl DataSource for FirebaseDataSource {
+    async fn execute_query(&self, query: &str, _params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
+        tracing::warn!("Firebase query execution not yet fully implemented: {}", query);
+        Ok(vec![])
+    }
+
+    async fn execute_mutation(&self, doc_id: &str, _data: &HashMap<String, Value>) -> Result<Value> {
+        tracing::warn!("Firebase mutation execution not yet fully implemented: {}", doc_id);
+        Ok(Value::Bool(true))
+    }
+}
+
+/// Supabase data source
+pub struct SupabaseDataSource {
+    url: String,
+    api_key: String,
+    table: String,
+    client: reqwest::Client,
+}
+
+impl SupabaseDataSource {
+    pub fn new(url: String, api_key: String, table: String) -> Self {
+        let client = reqwest::Client::new();
+        Self {
+            url,
+            api_key,
+            table,
+            client,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl DataSource for SupabaseDataSource {
+    async fn execute_query(&self, _query: &str, _params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
+        let url = format!("{}/rest/v1/{}", self.url, self.table);
+
+        let request = self.client.get(&url)
+            .header("apikey", &self.api_key)
+            .header("Authorization", format!("Bearer {}", self.api_key));
+
+        let response = request.send().await?;
+        let data: Value = response.json().await?;
+
+        match data {
+            Value::Array(arr) => {
+                let mut result = Vec::new();
+                for item in arr {
+                    if let Value::Object(obj) = item {
+                        let map: HashMap<String, Value> = obj.into_iter().collect();
+                        result.push(map);
+                    }
+                }
+                Ok(result)
+            }
+            _ => Ok(vec![]),
+        }
+    }
+
+    async fn execute_mutation(&self, _doc_id: &str, data: &HashMap<String, Value>) -> Result<Value> {
+        let url = format!("{}/rest/v1/{}", self.url, self.table);
+
+        let request = self.client.post(&url)
+            .header("apikey", &self.api_key)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .json(&data);
+
+        let response = request.send().await?;
+        let result: Value = response.json().await?;
+
+        Ok(result)
+    }
+}
+
+/// WebSocket data source
+pub struct WebSocketDataSource {
+    #[allow(dead_code)]
+    url: String,
+    #[allow(dead_code)]
+    reconnect: bool,
+    #[allow(dead_code)]
+    heartbeat_interval: Option<u32>,
+}
+
+impl WebSocketDataSource {
+    pub fn new(url: String, reconnect: bool, heartbeat_interval: Option<u32>) -> Self {
+        Self {
+            url,
+            reconnect,
+            heartbeat_interval,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl DataSource for WebSocketDataSource {
+    async fn execute_query(&self, message: &str, _params: Option<&HashMap<String, Value>>) -> Result<Vec<HashMap<String, Value>>> {
+        tracing::warn!("WebSocket query execution not yet fully implemented: {}", message);
+        Ok(vec![])
+    }
+
+    async fn execute_mutation(&self, message: &str, _data: &HashMap<String, Value>) -> Result<Value> {
+        tracing::warn!("WebSocket mutation execution not yet fully implemented: {}", message);
+        Ok(Value::Bool(true))
+    }
+}
+
 /// Factory to create data sources
 pub fn create_data_source(config: &DataSourceConfig) -> Result<Box<dyn DataSource>> {
     match config {
@@ -313,6 +540,48 @@ pub fn create_data_source(config: &DataSourceConfig) -> Result<Box<dyn DataSourc
             Ok(Box::new(ElasticsearchDataSource::new(
                 nodes.clone(),
                 index.clone(),
+            )))
+        }
+        DataSourceConfig::Grpc { endpoint, proto_file, service_name, tls_enabled } => {
+            Ok(Box::new(GrpcDataSource::new(
+                endpoint.clone(),
+                proto_file.clone(),
+                service_name.clone(),
+                *tls_enabled,
+            )))
+        }
+        DataSourceConfig::Kafka { brokers, topic, group_id } => {
+            Ok(Box::new(KafkaDataSource::new(
+                brokers.clone(),
+                topic.clone(),
+                group_id.clone(),
+            )))
+        }
+        DataSourceConfig::S3 { bucket, region, prefix, .. } => {
+            Ok(Box::new(S3DataSource::new(
+                bucket.clone(),
+                region.clone(),
+                prefix.clone(),
+            )))
+        }
+        DataSourceConfig::Firebase { project_id, collection, .. } => {
+            Ok(Box::new(FirebaseDataSource::new(
+                project_id.clone(),
+                collection.clone(),
+            )))
+        }
+        DataSourceConfig::Supabase { url, api_key, table } => {
+            Ok(Box::new(SupabaseDataSource::new(
+                url.clone(),
+                api_key.clone(),
+                table.clone(),
+            )))
+        }
+        DataSourceConfig::WebSocket { url, reconnect, heartbeat_interval } => {
+            Ok(Box::new(WebSocketDataSource::new(
+                url.clone(),
+                *reconnect,
+                *heartbeat_interval,
             )))
         }
     }
