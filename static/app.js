@@ -638,6 +638,242 @@ function createFieldInput(field, value) {
             }
             break;
 
+        case 'url':
+            $input = $('<input>')
+                .attr('type', 'url')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                .val(value);
+
+            if (field.config?.require_protocol) {
+                $input.attr('pattern', 'https?://.+');
+            }
+            break;
+
+        case 'phone':
+            $input = $('<input>')
+                .attr('type', 'tel')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                .val(value);
+
+            if (field.config?.validation_pattern) {
+                $input.attr('pattern', field.config.validation_pattern);
+            }
+            break;
+
+        case 'currency':
+            const currencySymbol = field.config?.symbol || '$';
+            const $currencyWrapper = $('<div>').addClass('relative');
+
+            $input = $('<input>')
+                .attr('type', 'number')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full pl-8 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                .val(value);
+
+            if (field.config?.min !== undefined) {
+                $input.attr('min', field.config.min);
+            }
+            if (field.config?.max !== undefined) {
+                $input.attr('max', field.config.max);
+            }
+
+            const decimalPlaces = field.config?.decimal_places || 2;
+            $input.attr('step', Math.pow(0.1, decimalPlaces));
+
+            const $symbol = $('<span>')
+                .addClass('absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500')
+                .text(currencySymbol);
+
+            $currencyWrapper.append($symbol).append($input);
+            $input = $currencyWrapper;
+            break;
+
+        case 'color':
+            $input = $('<input>')
+                .attr('type', 'color')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('h-10 w-full border border-gray-300 rounded-md cursor-pointer')
+                .val(value || '#000000');
+            break;
+
+        case 'range':
+            const $rangeWrapper = $('<div>');
+
+            $input = $('<input>')
+                .attr('type', 'range')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer')
+                .val(value);
+
+            if (field.config?.min !== undefined) {
+                $input.attr('min', field.config.min);
+            }
+            if (field.config?.max !== undefined) {
+                $input.attr('max', field.config.max);
+            }
+            if (field.config?.step !== undefined) {
+                $input.attr('step', field.config.step);
+            }
+
+            if (field.config?.show_value) {
+                const $valueDisplay = $('<span>')
+                    .attr('id', field.id + '-value')
+                    .addClass('block text-center mt-1 text-sm text-gray-600')
+                    .text(value || field.config?.min || 0);
+
+                $input.on('input', function() {
+                    $valueDisplay.text($(this).val());
+                });
+
+                $rangeWrapper.append($input).append($valueDisplay);
+                $input = $rangeWrapper;
+            } else {
+                $input = $('<div>').append($input);
+            }
+            break;
+
+        case 'time':
+            $input = $('<input>')
+                .attr('type', 'time')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                .val(value);
+
+            if (field.config?.min_time) {
+                $input.attr('min', field.config.min_time);
+            }
+            if (field.config?.max_time) {
+                $input.attr('max', field.config.max_time);
+            }
+            if (field.config?.step_minutes) {
+                $input.attr('step', field.config.step_minutes * 60);
+            }
+            break;
+
+        case 'rating':
+            const maxRating = field.config?.max_rating || 5;
+            const icon = field.config?.icon || 'star';
+            const iconClass = {
+                star: 'fa-star',
+                heart: 'fa-heart',
+                circle: 'fa-circle',
+                thumb: 'fa-thumbs-up'
+            }[icon] || 'fa-star';
+
+            const $ratingWrapper = $('<div>').addClass('flex items-center gap-1');
+            $input = $('<input>')
+                .attr('type', 'hidden')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .val(value || 0);
+
+            for (let i = 1; i <= maxRating; i++) {
+                const $star = $('<i>')
+                    .addClass(`fas ${iconClass} text-2xl cursor-pointer text-gray-300 hover:text-yellow-400`)
+                    .attr('data-rating', i)
+                    .click(function() {
+                        const rating = $(this).data('rating');
+                        $input.val(rating);
+                        $ratingWrapper.find('i').each(function(idx) {
+                            if (idx < rating) {
+                                $(this).removeClass('text-gray-300').addClass('text-yellow-400');
+                            } else {
+                                $(this).removeClass('text-yellow-400').addClass('text-gray-300');
+                            }
+                        });
+                    });
+
+                if (i <= (value || 0)) {
+                    $star.removeClass('text-gray-300').addClass('text-yellow-400');
+                }
+
+                $ratingWrapper.append($star);
+            }
+
+            $ratingWrapper.append($input);
+            $input = $ratingWrapper;
+            break;
+
+        case 'tags':
+            const $tagsWrapper = $('<div>').addClass('border border-gray-300 rounded-md p-2');
+            const $tagsContainer = $('<div>').addClass('flex flex-wrap gap-2 mb-2').attr('id', field.id + '-tags');
+            const $tagInput = $('<input>')
+                .attr('type', 'text')
+                .addClass('flex-1 px-2 py-1 border-0 focus:outline-none')
+                .attr('placeholder', 'Type and press Enter');
+
+            $input = $('<input>')
+                .attr('type', 'hidden')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .val(Array.isArray(value) ? value.join(',') : value || '');
+
+            const tags = (Array.isArray(value) ? value : (value ? value.split(',') : []));
+            tags.forEach(tag => {
+                if (tag.trim()) {
+                    addTag(tag.trim(), $tagsContainer, $input);
+                }
+            });
+
+            $tagInput.on('keypress', function(e) {
+                if (e.which === 13) {
+                    e.preventDefault();
+                    const tag = $(this).val().trim();
+                    if (tag && (!field.config?.max_tags || $tagsContainer.children().length < field.config.max_tags)) {
+                        addTag(tag, $tagsContainer, $input);
+                        $(this).val('');
+                    }
+                }
+            });
+
+            $tagsWrapper.append($tagsContainer).append($tagInput).append($input);
+            $input = $tagsWrapper;
+            break;
+
+        case 'image':
+            $input = $('<input>')
+                .attr('type', 'file')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .attr('accept', 'image/*')
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500');
+
+            if (field.config?.multiple) {
+                $input.attr('multiple', true);
+            }
+            if (field.config?.accepted_formats) {
+                $input.attr('accept', field.config.accepted_formats.map(f => 'image/' + f).join(','));
+            }
+            break;
+
+        case 'json':
+            $input = $('<textarea>')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm')
+                .attr('rows', 8)
+                .val(typeof value === 'object' ? JSON.stringify(value, null, 2) : value);
+
+            if (field.config?.validate_on_change) {
+                $input.on('change', function() {
+                    try {
+                        JSON.parse($(this).val());
+                        $(this).removeClass('border-red-500').addClass('border-gray-300');
+                    } catch (e) {
+                        $(this).removeClass('border-gray-300').addClass('border-red-500');
+                    }
+                });
+            }
+            break;
+
         default: // text
             $input = $('<input>')
                 .attr('type', 'text')
@@ -669,10 +905,40 @@ function submitForm(action, existingData = {}) {
         data[field.name] = field.value;
     });
 
-    // Handle checkboxes
+    // Handle special field types
     action.fields.forEach(function(field) {
-        if (field.field_type === 'boolean') {
-            data[field.id] = $('#' + field.id).is(':checked');
+        switch (field.field_type) {
+            case 'boolean':
+                data[field.id] = $('#' + field.id).is(':checked');
+                break;
+            case 'tags':
+                const tagsValue = $('#' + field.id).val();
+                data[field.id] = tagsValue ? tagsValue.split(',') : [];
+                break;
+            case 'json':
+                try {
+                    const jsonValue = $('#' + field.id).val();
+                    data[field.id] = jsonValue ? JSON.parse(jsonValue) : null;
+                } catch (e) {
+                    console.error('Invalid JSON for field ' + field.id, e);
+                    data[field.id] = $('#' + field.id).val();
+                }
+                break;
+            case 'rating':
+                data[field.id] = parseInt($('#' + field.id).val()) || 0;
+                break;
+            case 'currency':
+                const currencyValue = $('#' + field.id).val();
+                data[field.id] = currencyValue ? parseFloat(currencyValue) : 0;
+                break;
+            case 'number':
+                const numberValue = $('#' + field.id).val();
+                data[field.id] = numberValue ? parseFloat(numberValue) : 0;
+                break;
+            case 'range':
+                const rangeValue = $('#' + field.id).val();
+                data[field.id] = rangeValue ? parseFloat(rangeValue) : 0;
+                break;
         }
     });
 
@@ -804,6 +1070,35 @@ function getActionIcon(actionType) {
         case 'view': return 'fa-eye';
         default: return 'fa-cog';
     }
+}
+
+// Helper function for tags input
+function addTag(tag, $container, $hiddenInput) {
+    const $tag = $('<span>')
+        .addClass('inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-800 rounded text-sm')
+        .text(tag);
+
+    const $removeBtn = $('<button>')
+        .attr('type', 'button')
+        .addClass('text-indigo-600 hover:text-indigo-800')
+        .html('&times;')
+        .click(function() {
+            $tag.remove();
+            updateTagsValue($container, $hiddenInput);
+        });
+
+    $tag.append($removeBtn);
+    $container.append($tag);
+    updateTagsValue($container, $hiddenInput);
+}
+
+function updateTagsValue($container, $hiddenInput) {
+    const tags = [];
+    $container.find('span').each(function() {
+        const text = $(this).text().replace('×', '').trim();
+        if (text) tags.push(text);
+    });
+    $hiddenInput.val(tags.join(','));
 }
 
 function showError(message) {

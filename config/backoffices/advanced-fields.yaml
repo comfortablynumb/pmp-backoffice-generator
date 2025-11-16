@@ -1,0 +1,346 @@
+id: "advanced-fields-demo"
+name: "Advanced Fields Demo"
+description: "Demonstration of all field types and validation features"
+
+data_sources:
+  demo-api:
+    type: api
+    base_url: "https://jsonplaceholder.typicode.com"
+    headers:
+      Content-Type: "application/json"
+
+sections:
+  - id: "field-showcase"
+    name: "Field Types Showcase"
+    icon: "fa-th"
+    actions:
+      - id: "create-demo"
+        name: "Try All Fields"
+        type: form
+        data_source: "demo-api"
+        endpoint: "posts"
+        required_scopes: []
+        fields:
+          # Text Fields
+          - id: "username"
+            name: "Username"
+            field_type: text
+            config:
+              min_length: 3
+              max_length: 20
+              pattern: "^[a-zA-Z0-9_]+$"
+            required: true
+            placeholder: "john_doe_123"
+            help_text: "Alphanumeric and underscores only, 3-20 characters"
+            validations:
+              - rule_type:
+                  type: "min_length"
+                  value: 3
+                message: "Username must be at least 3 characters"
+              - rule_type:
+                  type: "pattern"
+                  regex: "^[a-zA-Z0-9_]+$"
+                message: "Only letters, numbers, and underscores allowed"
+
+          # Email with validations
+          - id: "email"
+            name: "Email Address"
+            field_type: email
+            config:
+              allow_multiple: false
+              domain_whitelist: ["gmail.com", "yahoo.com", "outlook.com"]
+            required: true
+            placeholder: "[email protected]"
+            help_text: "Only Gmail, Yahoo, or Outlook emails accepted"
+
+          # Password with strength requirements
+          - id: "password"
+            name: "Password"
+            field_type: password
+            config:
+              min_length: 8
+              max_length: 128
+              require_uppercase: true
+              require_lowercase: true
+              require_number: true
+              require_special: true
+            required: true
+            help_text: "Must include uppercase, lowercase, number, and special character"
+
+          # URL field
+          - id: "website"
+            name: "Website URL"
+            field_type: url
+            config:
+              allowed_protocols: ["https"]
+              require_protocol: true
+              allow_localhost: false
+            placeholder: "https://example.com"
+            help_text: "HTTPS URLs only"
+
+          # Phone field
+          - id: "phone"
+            name: "Phone Number"
+            field_type: phone
+            config:
+              country_code: "US"
+              validation_pattern: "^\\+?1?[-.\\s]?\\(?[0-9]{3}\\)?[-.\\s]?[0-9]{3}[-.\\s]?[0-9]{4}$"
+            placeholder: "+1 (555) 123-4567"
+            help_text: "US phone number format"
+
+          # Currency field
+          - id: "budget"
+            name: "Project Budget"
+            field_type: currency
+            config:
+              currency_code: "USD"
+              symbol: "$"
+              min: 0
+              max: 1000000
+              allow_negative: false
+              decimal_places: 2
+            required: true
+            default_value: 1000
+            help_text: "Budget in US Dollars"
+
+          # Number field
+          - id: "quantity"
+            name: "Quantity"
+            field_type: number
+            config:
+              min: 1
+              max: 100
+              step: 1
+              allow_decimals: false
+            required: true
+            default_value: 1
+            help_text: "Integer between 1 and 100"
+
+          # Date field
+          - id: "start_date"
+            name: "Start Date"
+            field_type: date
+            config:
+              min_date: "2024-01-01"
+              max_date: "2030-12-31"
+              format: "YYYY-MM-DD"
+            required: true
+
+          # Time field
+          - id: "meeting_time"
+            name: "Meeting Time"
+            field_type: time
+            config:
+              min_time: "09:00"
+              max_time: "17:00"
+              step_minutes: 15
+            help_text: "Business hours only (9 AM - 5 PM)"
+
+          # DateTime field
+          - id: "deadline"
+            name: "Deadline"
+            field_type: datetime
+            config:
+              min_date: "2024-01-01T00:00"
+            required: true
+
+          # Color field
+          - id: "theme_color"
+            name: "Theme Color"
+            field_type: color
+            config:
+              format: hex
+              allow_alpha: false
+              presets: ["#FF5733", "#33FF57", "#3357FF", "#F333FF"]
+            default_value: "#3357FF"
+            help_text: "Choose your brand color"
+
+          # Range field
+          - id: "priority"
+            name: "Priority Level"
+            field_type: range
+            config:
+              min: 1
+              max: 10
+              step: 1
+              show_value: true
+              show_ticks: false
+            default_value: 5
+            help_text: "1 = Low, 10 = Critical"
+
+          # Rating field
+          - id: "satisfaction"
+            name: "Satisfaction Rating"
+            field_type: rating
+            config:
+              max_rating: 5
+              icon: star
+              allow_half: false
+              allow_clear: true
+            help_text: "Rate your experience"
+
+          # Boolean field
+          - id: "newsletter"
+            name: "Subscribe to Newsletter"
+            field_type: boolean
+            config:
+              true_label: "Yes, send me updates"
+              false_label: "No thanks"
+            default_value: false
+
+          # Select field
+          - id: "category"
+            name: "Category"
+            field_type: select
+            config:
+              options:
+                - value: "web"
+                  label: "Web Development"
+                - value: "mobile"
+                  label: "Mobile Development"
+                - value: "backend"
+                  label: "Backend Development"
+                - value: "devops"
+                  label: "DevOps"
+                - value: "design"
+                  label: "UI/UX Design"
+              multiple: false
+              searchable: false
+            required: true
+            help_text: "Select your primary focus area"
+
+          # TextArea field
+          - id: "description"
+            name: "Project Description"
+            field_type: textarea
+            config:
+              min_length: 20
+              max_length: 500
+              rows: 5
+            required: true
+            placeholder: "Describe your project in detail..."
+            help_text: "Minimum 20 characters, maximum 500"
+
+          # Tags field
+          - id: "skills"
+            name: "Skills & Technologies"
+            field_type: tags
+            config:
+              min_tags: 1
+              max_tags: 10
+              min_tag_length: 2
+              max_tag_length: 20
+              predefined_tags: ["JavaScript", "Python", "Rust", "Go", "React", "Vue", "Docker", "Kubernetes"]
+              allow_custom: true
+              case_sensitive: false
+            help_text: "Add relevant skills (press Enter after each)"
+
+          # Image field
+          - id: "profile_picture"
+            name: "Profile Picture"
+            field_type: image
+            config:
+              max_size_mb: 2.0
+              accepted_formats: ["jpg", "jpeg", "png", "webp"]
+              max_width: 1920
+              max_height: 1920
+              min_width: 200
+              min_height: 200
+              aspect_ratio: "1:1"
+              allow_crop: true
+              allow_resize: true
+              multiple: false
+            help_text: "Square image, 200x200 to 1920x1920 pixels, max 2MB"
+
+          # JSON field
+          - id: "metadata"
+            name: "Additional Metadata"
+            field_type: json
+            config:
+              schema: null
+              pretty_print: true
+              validate_on_change: true
+              min_depth: 1
+              max_depth: 5
+            placeholder: '{"key": "value"}'
+            help_text: "Custom JSON data (optional)"
+
+        config:
+          form_mode: create
+          submit_button_text: "Submit Demo"
+          cancel_button_text: "Cancel"
+          show_success_message: true
+
+  - id: "validation-examples"
+    name: "Validation Examples"
+    icon: "fa-check-circle"
+    actions:
+      - id: "validation-demo"
+        name: "Advanced Validations"
+        type: form
+        data_source: "demo-api"
+        endpoint: "posts"
+        required_scopes: []
+        fields:
+          - id: "age"
+            name: "Age"
+            field_type: number
+            config:
+              min: 18
+              max: 120
+              allow_decimals: false
+            required: true
+            validations:
+              - rule_type:
+                  type: "min"
+                  value: 18
+                message: "You must be at least 18 years old"
+              - rule_type:
+                  type: "max"
+                  value: 120
+                message: "Please enter a valid age"
+
+          - id: "confirm_email"
+            name: "Confirm Email"
+            field_type: email
+            config: {}
+            required: true
+            validations:
+              - rule_type:
+                  type: "match_field"
+                  field: "primary_email"
+                message: "Emails must match"
+
+          - id: "primary_email"
+            name: "Primary Email"
+            field_type: email
+            config: {}
+            required: true
+
+          - id: "referral_code"
+            name: "Referral Code"
+            field_type: text
+            config:
+              min_length: 6
+              max_length: 6
+              pattern: "^[A-Z0-9]{6}$"
+            validations:
+              - rule_type:
+                  type: "pattern"
+                  regex: "^[A-Z0-9]{6}$"
+                message: "Referral code must be 6 uppercase alphanumeric characters"
+                condition:
+                  field: "has_referral"
+                  operator: equals
+                  value: true
+
+          - id: "has_referral"
+            name: "I have a referral code"
+            field_type: boolean
+            config: {}
+            default_value: false
+
+        config:
+          form_mode: create
+          submit_button_text: "Validate & Submit"
+          show_success_message: true

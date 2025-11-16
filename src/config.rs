@@ -232,6 +232,8 @@ pub struct FieldConfig {
     pub default_value: Option<serde_json::Value>,
     pub placeholder: Option<String>,
     pub help_text: Option<String>,
+    #[serde(default)]
+    pub validations: Vec<ValidationRule>,
 }
 
 fn default_false() -> bool {
@@ -255,7 +257,7 @@ pub enum FieldType {
     },
     Email {
         #[serde(default)]
-        config: TextFieldConfig,
+        config: EmailFieldConfig,
     },
     Password {
         #[serde(default)]
@@ -268,6 +270,10 @@ pub enum FieldType {
     DateTime {
         #[serde(default)]
         config: DateFieldConfig,
+    },
+    Time {
+        #[serde(default)]
+        config: TimeFieldConfig,
     },
     Boolean {
         #[serde(default)]
@@ -284,6 +290,42 @@ pub enum FieldType {
     File {
         #[serde(default)]
         config: FileFieldConfig,
+    },
+    Url {
+        #[serde(default)]
+        config: UrlFieldConfig,
+    },
+    Phone {
+        #[serde(default)]
+        config: PhoneFieldConfig,
+    },
+    Currency {
+        #[serde(default)]
+        config: CurrencyFieldConfig,
+    },
+    Color {
+        #[serde(default)]
+        config: ColorFieldConfig,
+    },
+    Range {
+        #[serde(default)]
+        config: RangeFieldConfig,
+    },
+    Rating {
+        #[serde(default)]
+        config: RatingFieldConfig,
+    },
+    Tags {
+        #[serde(default)]
+        config: TagsFieldConfig,
+    },
+    Image {
+        #[serde(default)]
+        config: ImageFieldConfig,
+    },
+    Json {
+        #[serde(default)]
+        config: JsonFieldConfig,
     },
 }
 
@@ -437,6 +479,31 @@ impl Default for TextAreaFieldConfig {
     }
 }
 
+/// Email field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailFieldConfig {
+    pub min_length: Option<usize>,
+    pub max_length: Option<usize>,
+    pub pattern: Option<String>,
+    #[serde(default)]
+    pub allow_multiple: bool,
+    pub domain_whitelist: Option<Vec<String>>,
+    pub domain_blacklist: Option<Vec<String>>,
+}
+
+impl Default for EmailFieldConfig {
+    fn default() -> Self {
+        Self {
+            min_length: None,
+            max_length: None,
+            pattern: Some(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$".to_string()),
+            allow_multiple: false,
+            domain_whitelist: None,
+            domain_blacklist: None,
+        }
+    }
+}
+
 /// File field configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileFieldConfig {
@@ -454,6 +521,318 @@ impl Default for FileFieldConfig {
             multiple: false,
         }
     }
+}
+
+/// URL field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UrlFieldConfig {
+    pub allowed_protocols: Option<Vec<String>>,
+    pub require_protocol: bool,
+    pub allow_localhost: bool,
+}
+
+impl Default for UrlFieldConfig {
+    fn default() -> Self {
+        Self {
+            allowed_protocols: Some(vec!["http".to_string(), "https".to_string()]),
+            require_protocol: true,
+            allow_localhost: false,
+        }
+    }
+}
+
+/// Phone field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PhoneFieldConfig {
+    pub format: Option<String>,
+    pub country_code: Option<String>,
+    pub allow_extensions: bool,
+    pub validation_pattern: Option<String>,
+}
+
+impl Default for PhoneFieldConfig {
+    fn default() -> Self {
+        Self {
+            format: None,
+            country_code: None,
+            allow_extensions: false,
+            validation_pattern: None,
+        }
+    }
+}
+
+/// Currency field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CurrencyFieldConfig {
+    pub currency_code: String,
+    pub symbol: Option<String>,
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    pub allow_negative: bool,
+    pub decimal_places: usize,
+}
+
+impl Default for CurrencyFieldConfig {
+    fn default() -> Self {
+        Self {
+            currency_code: "USD".to_string(),
+            symbol: Some("$".to_string()),
+            min: None,
+            max: None,
+            allow_negative: false,
+            decimal_places: 2,
+        }
+    }
+}
+
+/// Color field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ColorFieldConfig {
+    pub format: ColorFormat,
+    pub allow_alpha: bool,
+    pub presets: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ColorFormat {
+    Hex,
+    Rgb,
+    Rgba,
+    Hsl,
+}
+
+impl Default for ColorFieldConfig {
+    fn default() -> Self {
+        Self {
+            format: ColorFormat::Hex,
+            allow_alpha: false,
+            presets: None,
+        }
+    }
+}
+
+/// Range field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RangeFieldConfig {
+    pub min: f64,
+    pub max: f64,
+    pub step: f64,
+    pub show_value: bool,
+    pub show_ticks: bool,
+    pub labels: Option<HashMap<String, String>>,
+}
+
+impl Default for RangeFieldConfig {
+    fn default() -> Self {
+        Self {
+            min: 0.0,
+            max: 100.0,
+            step: 1.0,
+            show_value: true,
+            show_ticks: false,
+            labels: None,
+        }
+    }
+}
+
+/// Time field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeFieldConfig {
+    pub format: Option<String>,
+    pub min_time: Option<String>,
+    pub max_time: Option<String>,
+    pub step_minutes: Option<u32>,
+}
+
+impl Default for TimeFieldConfig {
+    fn default() -> Self {
+        Self {
+            format: Some("HH:MM".to_string()),
+            min_time: None,
+            max_time: None,
+            step_minutes: None,
+        }
+    }
+}
+
+/// Rating field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RatingFieldConfig {
+    pub max_rating: u8,
+    pub icon: RatingIcon,
+    pub allow_half: bool,
+    pub allow_clear: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RatingIcon {
+    Star,
+    Heart,
+    Circle,
+    Thumb,
+}
+
+impl Default for RatingFieldConfig {
+    fn default() -> Self {
+        Self {
+            max_rating: 5,
+            icon: RatingIcon::Star,
+            allow_half: false,
+            allow_clear: true,
+        }
+    }
+}
+
+/// Tags field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TagsFieldConfig {
+    pub min_tags: Option<usize>,
+    pub max_tags: Option<usize>,
+    pub min_tag_length: Option<usize>,
+    pub max_tag_length: Option<usize>,
+    pub predefined_tags: Option<Vec<String>>,
+    pub allow_custom: bool,
+    pub case_sensitive: bool,
+}
+
+impl Default for TagsFieldConfig {
+    fn default() -> Self {
+        Self {
+            min_tags: None,
+            max_tags: None,
+            min_tag_length: None,
+            max_tag_length: Some(50),
+            predefined_tags: None,
+            allow_custom: true,
+            case_sensitive: false,
+        }
+    }
+}
+
+/// Image field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImageFieldConfig {
+    pub max_size_mb: Option<f64>,
+    pub accepted_formats: Option<Vec<String>>,
+    pub max_width: Option<u32>,
+    pub max_height: Option<u32>,
+    pub min_width: Option<u32>,
+    pub min_height: Option<u32>,
+    pub aspect_ratio: Option<String>,
+    pub allow_crop: bool,
+    pub allow_resize: bool,
+    #[serde(default)]
+    pub multiple: bool,
+}
+
+impl Default for ImageFieldConfig {
+    fn default() -> Self {
+        Self {
+            max_size_mb: Some(5.0),
+            accepted_formats: Some(vec!["jpg".to_string(), "jpeg".to_string(), "png".to_string(), "gif".to_string(), "webp".to_string()]),
+            max_width: None,
+            max_height: None,
+            min_width: None,
+            min_height: None,
+            aspect_ratio: None,
+            allow_crop: false,
+            allow_resize: false,
+            multiple: false,
+        }
+    }
+}
+
+/// JSON field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonFieldConfig {
+    pub schema: Option<String>,
+    pub pretty_print: bool,
+    pub validate_on_change: bool,
+    pub min_depth: Option<usize>,
+    pub max_depth: Option<usize>,
+}
+
+impl Default for JsonFieldConfig {
+    fn default() -> Self {
+        Self {
+            schema: None,
+            pretty_print: true,
+            validate_on_change: true,
+            min_depth: None,
+            max_depth: None,
+        }
+    }
+}
+
+/// Custom validation rule
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationRule {
+    pub rule_type: ValidationType,
+    pub message: Option<String>,
+    pub condition: Option<ValidationCondition>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ValidationType {
+    Required {
+        value: bool,
+    },
+    MinLength {
+        value: usize,
+    },
+    MaxLength {
+        value: usize,
+    },
+    Pattern {
+        regex: String,
+    },
+    Min {
+        value: f64,
+    },
+    Max {
+        value: f64,
+    },
+    Email,
+    Url,
+    Phone,
+    CustomFunction {
+        function_name: String,
+    },
+    DependsOn {
+        field: String,
+        expected_value: serde_json::Value,
+    },
+    UniqueIn {
+        field_list: Vec<String>,
+    },
+    MatchField {
+        field: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationCondition {
+    pub field: String,
+    pub operator: ConditionOperator,
+    pub value: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ConditionOperator {
+    Equals,
+    NotEquals,
+    GreaterThan,
+    LessThan,
+    GreaterThanOrEqual,
+    LessThanOrEqual,
+    Contains,
+    NotContains,
+    In,
+    NotIn,
 }
 
 /// Load application configuration
