@@ -8,7 +8,7 @@ data_sources:
     connection_string: "sqlite://products.db"
     db_type: sqlite
 
-  categories-api:
+  products-api:
     type: api
     base_url: "https://dummyjson.com"
     headers:
@@ -21,73 +21,94 @@ sections:
     actions:
       - id: "list-products"
         name: "List Products"
-        action_type: list
-        data_source: "categories-api"
+        type: list
+        data_source: "products-api"
         endpoint: "products"
         required_scopes: ["products:read"]
         fields:
           - id: "id"
             name: "ID"
             field_type: number
-            required: false
+            config: {}
             editable: false
             visible: true
 
           - id: "title"
             name: "Product Name"
             field_type: text
-            required: true
-            editable: true
-            visible: true
-            validation:
+            config:
               min_length: 3
               max_length: 200
+            required: true
+            visible: true
 
           - id: "description"
             name: "Description"
             field_type: textarea
-            required: true
-            editable: true
-            visible: true
-            validation:
+            config:
               min_length: 10
+              rows: 3
+            required: true
+            visible: false
 
           - id: "price"
-            name: "Price"
+            name: "Price ($)"
             field_type: number
+            config:
+              min: 0
+              step: 0.01
+              allow_decimals: true
             required: true
-            editable: true
             visible: true
-            validation:
-              min_value: 0
 
           - id: "category"
             name: "Category"
             field_type: text
+            config: {}
             required: true
-            editable: true
             visible: true
 
           - id: "brand"
             name: "Brand"
             field_type: text
-            required: false
-            editable: true
+            config: {}
             visible: true
 
           - id: "stock"
             name: "Stock"
             field_type: number
+            config:
+              min: 0
+              allow_decimals: false
             required: true
-            editable: true
             visible: true
-            default_value: 0
-            validation:
-              min_value: 0
+        config:
+          enable_pagination: true
+          page_size: 20
+          filters:
+            - id: "category-filter"
+              name: "Category"
+              field: "category"
+              filter_type: text
+            - id: "brand-filter"
+              name: "Brand"
+              field: "brand"
+              filter_type: text
+            - id: "price-min-filter"
+              name: "Min Price"
+              field: "price_min"
+              filter_type: number
+            - id: "stock-filter"
+              name: "In Stock"
+              field: "stock"
+              filter_type: boolean
+          sortable_fields: ["title", "price", "stock", "category"]
+          default_sort_field: "title"
+          default_sort_order: ascending
 
       - id: "create-product"
         name: "Create Product"
-        action_type: create
+        type: form
         data_source: "products-db"
         query: "INSERT INTO products (name, description, price, category, stock) VALUES (?, ?, ?, ?, ?)"
         required_scopes: ["products:write"]
@@ -95,50 +116,86 @@ sections:
           - id: "title"
             name: "Product Name"
             field_type: text
+            config:
+              min_length: 3
+              max_length: 200
             required: true
-            editable: true
-            visible: true
+            placeholder: "Enter product name"
+            help_text: "A descriptive name for the product"
 
           - id: "description"
             name: "Description"
             field_type: textarea
+            config:
+              min_length: 10
+              max_length: 1000
+              rows: 5
             required: true
-            editable: true
-            visible: true
+            placeholder: "Describe the product features and benefits"
+            help_text: "Detailed product description"
 
           - id: "price"
             name: "Price"
             field_type: number
+            config:
+              min: 0
+              max: 999999.99
+              step: 0.01
+              allow_decimals: true
             required: true
-            editable: true
-            visible: true
+            placeholder: "0.00"
+            help_text: "Product price in USD"
             default_value: 0
 
           - id: "category"
             name: "Category"
             field_type: select
-            required: true
-            editable: true
-            visible: true
-            validation:
+            config:
               options:
-                - "Electronics"
-                - "Clothing"
-                - "Food"
-                - "Books"
-                - "Home & Garden"
+                - value: "electronics"
+                  label: "Electronics"
+                - value: "clothing"
+                  label: "Clothing"
+                - value: "food"
+                  label: "Food & Beverages"
+                - value: "books"
+                  label: "Books"
+                - value: "home-garden"
+                  label: "Home & Garden"
+              multiple: false
+              searchable: false
+            required: true
+            help_text: "Select product category"
 
           - id: "stock"
             name: "Stock Quantity"
             field_type: number
+            config:
+              min: 0
+              max: 99999
+              allow_decimals: false
             required: true
-            editable: true
-            visible: true
+            placeholder: "0"
+            help_text: "Available quantity in stock"
             default_value: 0
+
+          - id: "active"
+            name: "Active"
+            field_type: boolean
+            config:
+              true_label: "Yes"
+              false_label: "No"
+            default_value: true
+            help_text: "Whether this product is active and available for sale"
+        config:
+          form_mode: create
+          submit_button_text: "Create Product"
+          cancel_button_text: "Cancel"
+          show_success_message: true
 
       - id: "update-product"
         name: "Update Product"
-        action_type: update
+        type: form
         data_source: "products-db"
         query: "UPDATE products SET name = ?, description = ?, price = ?, category = ?, stock = ? WHERE id = ?"
         required_scopes: ["products:write"]
@@ -146,6 +203,7 @@ sections:
           - id: "id"
             name: "ID"
             field_type: number
+            config: {}
             required: true
             editable: false
             visible: true
@@ -153,52 +211,67 @@ sections:
           - id: "title"
             name: "Product Name"
             field_type: text
+            config:
+              min_length: 3
+              max_length: 200
             required: true
-            editable: true
-            visible: true
 
           - id: "description"
             name: "Description"
             field_type: textarea
+            config:
+              min_length: 10
+              rows: 5
             required: true
-            editable: true
-            visible: true
 
           - id: "price"
             name: "Price"
             field_type: number
+            config:
+              min: 0
+              step: 0.01
+              allow_decimals: true
             required: true
-            editable: true
-            visible: true
 
           - id: "category"
             name: "Category"
             field_type: select
-            required: true
-            editable: true
-            visible: true
-            validation:
+            config:
               options:
-                - "Electronics"
-                - "Clothing"
-                - "Food"
-                - "Books"
-                - "Home & Garden"
+                - value: "electronics"
+                  label: "Electronics"
+                - value: "clothing"
+                  label: "Clothing"
+                - value: "food"
+                  label: "Food & Beverages"
+                - value: "books"
+                  label: "Books"
+                - value: "home-garden"
+                  label: "Home & Garden"
+              multiple: false
+            required: true
 
           - id: "stock"
             name: "Stock Quantity"
             field_type: number
+            config:
+              min: 0
+              allow_decimals: false
             required: true
-            editable: true
-            visible: true
+        config:
+          form_mode: update
+          submit_button_text: "Update Product"
+          show_success_message: true
 
       - id: "delete-product"
         name: "Delete Product"
-        action_type: delete
+        type: form
         data_source: "products-db"
         query: "DELETE FROM products WHERE id = ?"
         required_scopes: ["products:delete"]
         fields: []
+        config:
+          form_mode: delete
 
   - id: "categories"
     name: "Categories"
@@ -206,14 +279,15 @@ sections:
     actions:
       - id: "list-categories"
         name: "List Categories"
-        action_type: list
-        data_source: "categories-api"
+        type: list
+        data_source: "products-api"
         endpoint: "products/categories"
         required_scopes: ["categories:read"]
         fields:
           - id: "slug"
             name: "Category Slug"
             field_type: text
+            config: {}
             required: true
             editable: false
             visible: true
@@ -221,13 +295,18 @@ sections:
           - id: "name"
             name: "Category Name"
             field_type: text
+            config:
+              min_length: 2
+              max_length: 100
             required: true
-            editable: true
             visible: true
 
           - id: "url"
             name: "URL"
             field_type: text
-            required: false
+            config: {}
             editable: false
             visible: true
+        config:
+          enable_pagination: false
+          filters: []

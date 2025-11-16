@@ -78,6 +78,12 @@ async fn backoffice_handler(
 
 #[derive(Debug, Deserialize)]
 struct ActionQuery {
+    page: Option<usize>,
+    page_size: Option<usize>,
+    #[allow(dead_code)]
+    sort_by: Option<String>,
+    #[allow(dead_code)]
+    sort_order: Option<String>,
     #[serde(flatten)]
     params: HashMap<String, String>,
 }
@@ -88,6 +94,8 @@ async fn execute_action_handler(
     Path((backoffice_id, section_id, action_id)): Path<(String, String, String)>,
     Query(query): Query<ActionQuery>,
 ) -> impl IntoResponse {
+    use crate::config::ActionType;
+
     // Find the backoffice
     let backoffice = match state.backoffices.iter().find(|b| b.id == backoffice_id) {
         Some(b) => b,
@@ -124,9 +132,55 @@ async fn execute_action_handler(
         .map(|(k, v)| (k.clone(), Value::String(v.clone())))
         .collect();
 
-    match data_source.execute_query(query_str, Some(&params_converted)).await {
-        Ok(result) => (StatusCode::OK, Json(serde_json::json!({"data": result, "fields": action.fields}))).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+    match &action.action_type {
+        ActionType::List { fields, config } => {
+            match data_source.execute_query(query_str, Some(&params_converted)).await {
+                Ok(mut result) => {
+                    let total_items = result.len();
+
+                    // Handle pagination if enabled
+                    if config.enable_pagination {
+                        let page = query.page.unwrap_or(1);
+                        let page_size = query.page_size.unwrap_or(config.page_size);
+                        let start = (page - 1) * page_size;
+
+                        result = result.into_iter().skip(start).take(page_size).collect();
+
+                        (StatusCode::OK, Json(serde_json::json!({
+                            "data": result,
+                            "fields": fields,
+                            "config": config,
+                            "pagination": {
+                                "page": page,
+                                "page_size": page_size,
+                                "total_items": total_items,
+                                "total_pages": (total_items + page_size - 1) / page_size,
+                            }
+                        }))).into_response()
+                    } else {
+                        (StatusCode::OK, Json(serde_json::json!({
+                            "data": result,
+                            "fields": fields,
+                            "config": config,
+                        }))).into_response()
+                    }
+                },
+                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+            }
+        },
+        ActionType::View { fields } | ActionType::Custom { fields } => {
+            match data_source.execute_query(query_str, Some(&params_converted)).await {
+                Ok(result) => (StatusCode::OK, Json(serde_json::json!({"data": result, "fields": fields}))).into_response(),
+                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))).into_response(),
+            }
+        },
+        ActionType::Form { fields, config } => {
+            // For form actions in GET, return the form configuration
+            (StatusCode::OK, Json(serde_json::json!({
+                "fields": fields,
+                "config": config,
+            }))).into_response()
+        },
     }
 }
 

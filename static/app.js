@@ -3,6 +3,8 @@ let currentBackoffice = null;
 let currentSection = null;
 let currentAction = null;
 let backoffices = [];
+let currentPage = 1;
+let currentFilters = {};
 
 // Initialize the application
 $(document).ready(function() {
@@ -93,6 +95,10 @@ function selectSection(sectionId) {
     $('#sections-list li').removeClass('bg-indigo-100 font-semibold');
     $(`#sections-list li[data-id="${sectionId}"]`).addClass('bg-indigo-100 font-semibold');
 
+    // Reset state
+    currentPage = 1;
+    currentFilters = {};
+
     // Render section content
     renderSectionContent();
 }
@@ -112,8 +118,8 @@ function renderSectionContent() {
     const $actions = $('<div>').addClass('flex space-x-3 mt-4');
 
     currentSection.actions.forEach(function(action) {
-        const buttonClass = getActionButtonClass(action.action_type);
-        const icon = getActionIcon(action.action_type);
+        const buttonClass = getActionButtonClass(action.type);
+        const icon = getActionIcon(action.type);
 
         const $btn = $('<button>')
             .addClass(`px-4 py-2 rounded-lg ${buttonClass} transition-colors`)
@@ -133,7 +139,7 @@ function renderSectionContent() {
     $content.append($dataArea);
 
     // Auto-load list action if available
-    const listAction = currentSection.actions.find(a => a.action_type === 'list');
+    const listAction = currentSection.actions.find(a => a.type === 'list');
     if (listAction) {
         executeAction(listAction);
     }
@@ -143,47 +149,53 @@ function renderSectionContent() {
 function executeAction(action) {
     currentAction = action;
 
-    switch(action.action_type) {
+    switch(action.type) {
         case 'list':
             loadListData(action);
             break;
-        case 'create':
-            showCreateForm(action);
-            break;
-        case 'update':
-            showUpdateForm(action);
-            break;
-        case 'delete':
-            confirmDelete(action);
+        case 'form':
+            showForm(action);
             break;
         case 'view':
             loadViewData(action);
             break;
         default:
-            showError('Action type not supported: ' + action.action_type);
+            showError('Action type not supported: ' + action.type);
     }
 }
 
 // Load list data
-function loadListData(action) {
+function loadListData(action, page = 1) {
+    currentPage = page;
     const url = `/api/backoffices/${currentBackoffice.id}/sections/${currentSection.id}/actions/${action.id}`;
+
+    const params = { ...currentFilters };
+    if (action.config && action.config.enable_pagination) {
+        params.page = page;
+        params.page_size = action.config.page_size || 20;
+    }
 
     $('#data-area').html('<div class="text-center py-8"><div class="loading mx-auto"></div><p class="mt-4 text-gray-500">Loading...</p></div>');
 
-    $.get(url, function(response) {
-        renderTable(response.data, response.fields);
+    $.get(url, params, function(response) {
+        renderTable(response.data, response.fields, response.config, response.pagination);
     }).fail(function(err) {
         showError('Failed to load data: ' + (err.responseJSON?.error || err.responseText));
     });
 }
 
 // Render data table
-function renderTable(data, fields) {
+function renderTable(data, fields, config, pagination) {
     const $dataArea = $('#data-area');
     $dataArea.empty();
 
+    // Render filters if configured
+    if (config && config.filters && config.filters.length > 0) {
+        renderFilters(config.filters);
+    }
+
     if (!data || data.length === 0) {
-        $dataArea.html('<p class="text-gray-500 text-center py-8">No data available</p>');
+        $dataArea.append('<p class="text-gray-500 text-center py-8">No data available</p>');
         return;
     }
 
@@ -218,28 +230,32 @@ function renderTable(data, fields) {
             $tr.append(
                 $('<td>')
                     .addClass('px-6 py-4 whitespace-nowrap text-sm text-gray-900')
-                    .text(value)
+                    .text(formatFieldValue(value, field))
             );
         });
 
         // Action buttons for each row
         const $actionCell = $('<td>').addClass('px-6 py-4 whitespace-nowrap text-sm font-medium');
 
-        // Edit button
-        const updateAction = currentSection.actions.find(a => a.action_type === 'update');
+        // Edit button (look for form action with update mode)
+        const updateAction = currentSection.actions.find(a =>
+            a.type === 'form' && a.config && a.config.form_mode === 'update'
+        );
         if (updateAction) {
             $actionCell.append(
                 $('<button>')
                     .addClass('text-indigo-600 hover:text-indigo-900 mr-3')
                     .html('<i class="fas fa-edit"></i>')
                     .click(function() {
-                        showUpdateForm(updateAction, row);
+                        showForm(updateAction, row);
                     })
             );
         }
 
-        // Delete button
-        const deleteAction = currentSection.actions.find(a => a.action_type === 'delete');
+        // Delete button (look for form action with delete mode)
+        const deleteAction = currentSection.actions.find(a =>
+            a.type === 'form' && a.config && a.config.form_mode === 'delete'
+        );
         if (deleteAction) {
             $actionCell.append(
                 $('<button>')
@@ -257,27 +273,184 @@ function renderTable(data, fields) {
 
     $table.append($tbody);
 
-    const $tableContainer = $('<div>').addClass('table-container');
+    const $tableContainer = $('<div>').addClass('table-container overflow-x-auto');
     $tableContainer.append($table);
     $dataArea.append($tableContainer);
+
+    // Render pagination if enabled
+    if (pagination) {
+        renderPagination(pagination);
+    }
 }
 
-// Show create form
-function showCreateForm(action) {
-    $('#modal-title').text('Create ' + currentSection.name);
-    renderForm(action.fields, {});
-    $('#formModal').addClass('active');
+// Render filters
+function renderFilters(filters) {
+    const $filterArea = $('<div>').addClass('mb-4 p-4 bg-gray-50 rounded-lg');
+    const $filterTitle = $('<h3>').addClass('text-sm font-semibold text-gray-700 mb-3').text('Filters');
+    $filterArea.append($filterTitle);
 
-    $('#dynamic-form').off('submit').on('submit', function(e) {
-        e.preventDefault();
-        submitForm(action);
+    const $filterForm = $('<div>').addClass('grid grid-cols-1 md:grid-cols-3 gap-4');
+
+    filters.forEach(function(filter) {
+        const $filterGroup = $('<div>');
+        const $label = $('<label>')
+            .addClass('block text-sm font-medium text-gray-700 mb-1')
+            .text(filter.name);
+
+        let $input;
+        switch(filter.filter_type) {
+            case 'text':
+                $input = $('<input>')
+                    .attr('type', 'text')
+                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md')
+                    .attr('id', 'filter-' + filter.id);
+                break;
+            case 'number':
+                $input = $('<input>')
+                    .attr('type', 'number')
+                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md')
+                    .attr('id', 'filter-' + filter.id);
+                break;
+            case 'date':
+                $input = $('<input>')
+                    .attr('type', 'date')
+                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md')
+                    .attr('id', 'filter-' + filter.id);
+                break;
+            case 'boolean':
+                $input = $('<select>')
+                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md')
+                    .attr('id', 'filter-' + filter.id)
+                    .append($('<option>').val('').text('All'))
+                    .append($('<option>').val('true').text('Yes'))
+                    .append($('<option>').val('false').text('No'));
+                break;
+            default:
+                if (filter.filter_type.select && filter.filter_type.select.options) {
+                    $input = $('<select>')
+                        .addClass('w-full px-3 py-2 border border-gray-300 rounded-md')
+                        .attr('id', 'filter-' + filter.id);
+                    $input.append($('<option>').val('').text('All'));
+                    filter.filter_type.select.options.forEach(function(opt) {
+                        $input.append($('<option>').val(opt).text(opt));
+                    });
+                }
+        }
+
+        if ($input) {
+            $filterGroup.append($label).append($input);
+            $filterForm.append($filterGroup);
+        }
     });
+
+    const $filterButton = $('<button>')
+        .addClass('px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 mt-4')
+        .text('Apply Filters')
+        .click(function() {
+            applyFilters(filters);
+        });
+
+    $filterArea.append($filterForm).append($filterButton);
+    $('#data-area').prepend($filterArea);
 }
 
-// Show update form
-function showUpdateForm(action, data = {}) {
-    $('#modal-title').text('Update ' + currentSection.name);
-    renderForm(action.fields, data);
+// Apply filters
+function applyFilters(filters) {
+    currentFilters = {};
+    filters.forEach(function(filter) {
+        const value = $('#filter-' + filter.id).val();
+        if (value) {
+            currentFilters[filter.field] = value;
+        }
+    });
+    loadListData(currentAction, 1);
+}
+
+// Render pagination
+function renderPagination(pagination) {
+    const $paginationArea = $('<div>').addClass('mt-4 flex justify-between items-center');
+
+    // Page info
+    const $pageInfo = $('<div>').addClass('text-sm text-gray-700');
+    const start = (pagination.page - 1) * pagination.page_size + 1;
+    const end = Math.min(pagination.page * pagination.page_size, pagination.total_items);
+    $pageInfo.text(`Showing ${start} to ${end} of ${pagination.total_items} results`);
+
+    // Page buttons
+    const $pageButtons = $('<div>').addClass('flex space-x-2');
+
+    // Previous button
+    if (pagination.page > 1) {
+        $pageButtons.append(
+            $('<button>')
+                .addClass('px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50')
+                .text('Previous')
+                .click(function() {
+                    loadListData(currentAction, pagination.page - 1);
+                })
+        );
+    }
+
+    // Page numbers
+    for (let i = Math.max(1, pagination.page - 2); i <= Math.min(pagination.total_pages, pagination.page + 2); i++) {
+        const $pageBtn = $('<button>')
+            .addClass('px-3 py-1 border border-gray-300 rounded-md')
+            .text(i)
+            .click(function() {
+                loadListData(currentAction, i);
+            });
+
+        if (i === pagination.page) {
+            $pageBtn.addClass('bg-indigo-600 text-white border-indigo-600');
+        } else {
+            $pageBtn.addClass('hover:bg-gray-50');
+        }
+
+        $pageButtons.append($pageBtn);
+    }
+
+    // Next button
+    if (pagination.page < pagination.total_pages) {
+        $pageButtons.append(
+            $('<button>')
+                .addClass('px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50')
+                .text('Next')
+                .click(function() {
+                    loadListData(currentAction, pagination.page + 1);
+                })
+        );
+    }
+
+    $paginationArea.append($pageInfo).append($pageButtons);
+    $('#data-area').append($paginationArea);
+}
+
+// Format field value based on field type
+function formatFieldValue(value, field) {
+    if (field.field_type === 'boolean') {
+        return value ? 'Yes' : 'No';
+    }
+    if (field.field_type === 'date' || field.field_type === 'datetime') {
+        return value ? new Date(value).toLocaleString() : '';
+    }
+    return value;
+}
+
+// Show form (for create, update, delete)
+function showForm(action, data = {}) {
+    const config = action.config || {};
+
+    let title = action.name;
+    if (config.form_mode === 'create') {
+        title = 'Create ' + currentSection.name;
+    } else if (config.form_mode === 'update') {
+        title = 'Update ' + currentSection.name;
+    } else if (config.form_mode === 'delete') {
+        title = 'Delete ' + currentSection.name;
+    }
+
+    $('#modal-title').text(title);
+    renderForm(action.fields, data, config);
     $('#formModal').addClass('active');
 
     $('#dynamic-form').off('submit').on('submit', function(e) {
@@ -287,12 +460,12 @@ function showUpdateForm(action, data = {}) {
 }
 
 // Render dynamic form fields
-function renderForm(fields, data) {
+function renderForm(fields, data, config = {}) {
     const $formFields = $('#form-fields');
     $formFields.empty();
 
     fields.forEach(function(field) {
-        if (!field.editable) return;
+        if (!field.editable && config.form_mode === 'create') return;
 
         const $fieldGroup = $('<div>').addClass('form-group');
 
@@ -304,93 +477,187 @@ function renderForm(fields, data) {
         $fieldGroup.append($label);
 
         const value = data[field.id] || field.default_value || '';
-        let $input;
-
-        switch(field.field_type) {
-            case 'textarea':
-                $input = $('<textarea>')
-                    .attr('id', field.id)
-                    .attr('name', field.id)
-                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
-                    .attr('rows', 4)
-                    .val(value);
-                break;
-
-            case 'select':
-                $input = $('<select>')
-                    .attr('id', field.id)
-                    .attr('name', field.id)
-                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500');
-
-                if (field.validation && field.validation.options) {
-                    field.validation.options.forEach(function(option) {
-                        $input.append($('<option>').val(option).text(option));
-                    });
-                }
-                $input.val(value);
-                break;
-
-            case 'boolean':
-                $input = $('<input>')
-                    .attr('type', 'checkbox')
-                    .attr('id', field.id)
-                    .attr('name', field.id)
-                    .addClass('h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded')
-                    .prop('checked', value === true || value === 'true');
-                break;
-
-            case 'date':
-                $input = $('<input>')
-                    .attr('type', 'date')
-                    .attr('id', field.id)
-                    .attr('name', field.id)
-                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
-                    .val(value);
-                break;
-
-            case 'number':
-                $input = $('<input>')
-                    .attr('type', 'number')
-                    .attr('id', field.id)
-                    .attr('name', field.id)
-                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
-                    .val(value);
-                break;
-
-            case 'email':
-                $input = $('<input>')
-                    .attr('type', 'email')
-                    .attr('id', field.id)
-                    .attr('name', field.id)
-                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
-                    .val(value);
-                break;
-
-            case 'password':
-                $input = $('<input>')
-                    .attr('type', 'password')
-                    .attr('id', field.id)
-                    .attr('name', field.id)
-                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
-                    .val(value);
-                break;
-
-            default: // text
-                $input = $('<input>')
-                    .attr('type', 'text')
-                    .attr('id', field.id)
-                    .attr('name', field.id)
-                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
-                    .val(value);
-        }
+        let $input = createFieldInput(field, value);
 
         if (field.required) {
             $input.attr('required', true);
         }
 
+        if (field.placeholder) {
+            $input.attr('placeholder', field.placeholder);
+        }
+
         $fieldGroup.append($input);
+
+        if (field.help_text) {
+            $fieldGroup.append(
+                $('<p>').addClass('text-xs text-gray-500 mt-1').text(field.help_text)
+            );
+        }
+
         $formFields.append($fieldGroup);
     });
+
+    // Update submit button text
+    const submitText = config.submit_button_text || 'Submit';
+    $('#submit-text').text(submitText);
+}
+
+// Create field input based on field type
+function createFieldInput(field, value) {
+    let $input;
+
+    switch(field.field_type) {
+        case 'textarea':
+            const rows = field.config?.rows || 4;
+            $input = $('<textarea>')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                .attr('rows', rows)
+                .val(value);
+
+            if (field.config?.min_length) {
+                $input.attr('minlength', field.config.min_length);
+            }
+            if (field.config?.max_length) {
+                $input.attr('maxlength', field.config.max_length);
+            }
+            break;
+
+        case 'select':
+            $input = $('<select>')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500');
+
+            if (field.config?.multiple) {
+                $input.attr('multiple', true);
+            }
+
+            if (field.config?.options) {
+                field.config.options.forEach(function(option) {
+                    $input.append($('<option>')
+                        .val(option.value)
+                        .text(option.label)
+                        .prop('selected', option.value === value)
+                    );
+                });
+            }
+            break;
+
+        case 'boolean':
+            const trueLabel = field.config?.true_label || 'Yes';
+            const falseLabel = field.config?.false_label || 'No';
+
+            $input = $('<input>')
+                .attr('type', 'checkbox')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded')
+                .prop('checked', value === true || value === 'true');
+            break;
+
+        case 'date':
+        case 'datetime':
+            $input = $('<input>')
+                .attr('type', field.field_type === 'datetime' ? 'datetime-local' : 'date')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                .val(value);
+
+            if (field.config?.min_date) {
+                $input.attr('min', field.config.min_date);
+            }
+            if (field.config?.max_date) {
+                $input.attr('max', field.config.max_date);
+            }
+            break;
+
+        case 'number':
+            $input = $('<input>')
+                .attr('type', 'number')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                .val(value);
+
+            if (field.config?.min !== undefined) {
+                $input.attr('min', field.config.min);
+            }
+            if (field.config?.max !== undefined) {
+                $input.attr('max', field.config.max);
+            }
+            if (field.config?.step !== undefined) {
+                $input.attr('step', field.config.step);
+            }
+            break;
+
+        case 'email':
+            $input = $('<input>')
+                .attr('type', 'email')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                .val(value);
+
+            if (field.config?.pattern) {
+                $input.attr('pattern', field.config.pattern);
+            }
+            break;
+
+        case 'password':
+            $input = $('<input>')
+                .attr('type', 'password')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                .val(value);
+
+            if (field.config?.min_length) {
+                $input.attr('minlength', field.config.min_length);
+            }
+            if (field.config?.max_length) {
+                $input.attr('maxlength', field.config.max_length);
+            }
+            break;
+
+        case 'file':
+            $input = $('<input>')
+                .attr('type', 'file')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500');
+
+            if (field.config?.multiple) {
+                $input.attr('multiple', true);
+            }
+            if (field.config?.accepted_types) {
+                $input.attr('accept', field.config.accepted_types.join(','));
+            }
+            break;
+
+        default: // text
+            $input = $('<input>')
+                .attr('type', 'text')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                .val(value);
+
+            if (field.config?.min_length) {
+                $input.attr('minlength', field.config.min_length);
+            }
+            if (field.config?.max_length) {
+                $input.attr('maxlength', field.config.max_length);
+            }
+            if (field.config?.pattern) {
+                $input.attr('pattern', field.config.pattern);
+            }
+    }
+
+    return $input;
 }
 
 // Submit form
@@ -400,6 +667,13 @@ function submitForm(action, existingData = {}) {
 
     formData.forEach(function(field) {
         data[field.name] = field.value;
+    });
+
+    // Handle checkboxes
+    action.fields.forEach(function(field) {
+        if (field.field_type === 'boolean') {
+            data[field.id] = $('#' + field.id).is(':checked');
+        }
     });
 
     // Merge with existing data (for updates)
@@ -417,12 +691,15 @@ function submitForm(action, existingData = {}) {
         data: JSON.stringify(payload),
         success: function(response) {
             closeModal();
-            showSuccess('Operation completed successfully');
+
+            if (action.config?.show_success_message !== false) {
+                showSuccess('Operation completed successfully');
+            }
 
             // Reload list if available
-            const listAction = currentSection.actions.find(a => a.action_type === 'list');
+            const listAction = currentSection.actions.find(a => a.type === 'list');
             if (listAction) {
-                executeAction(listAction);
+                loadListData(listAction, currentPage);
             }
         },
         error: function(err) {
@@ -449,9 +726,9 @@ function confirmDelete(action, data = {}) {
                 showSuccess('Item deleted successfully');
 
                 // Reload list
-                const listAction = currentSection.actions.find(a => a.action_type === 'list');
+                const listAction = currentSection.actions.find(a => a.type === 'list');
                 if (listAction) {
-                    executeAction(listAction);
+                    loadListData(listAction, currentPage);
                 }
             },
             error: function(err) {
@@ -459,6 +736,49 @@ function confirmDelete(action, data = {}) {
             }
         });
     }
+}
+
+// Load view data
+function loadViewData(action) {
+    const url = `/api/backoffices/${currentBackoffice.id}/sections/${currentSection.id}/actions/${action.id}`;
+
+    $('#data-area').html('<div class="text-center py-8"><div class="loading mx-auto"></div><p class="mt-4 text-gray-500">Loading...</p></div>');
+
+    $.get(url, function(response) {
+        renderViewData(response.data, response.fields);
+    }).fail(function(err) {
+        showError('Failed to load data: ' + (err.responseJSON?.error || err.responseText));
+    });
+}
+
+// Render view data
+function renderViewData(data, fields) {
+    const $dataArea = $('#data-area');
+    $dataArea.empty();
+
+    if (!data || data.length === 0) {
+        $dataArea.html('<p class="text-gray-500 text-center py-8">No data available</p>');
+        return;
+    }
+
+    const $details = $('<div>').addClass('space-y-4');
+
+    data.forEach(function(item) {
+        const $card = $('<div>').addClass('bg-gray-50 p-4 rounded-lg');
+
+        fields.filter(f => f.visible).forEach(function(field) {
+            const value = item[field.id] || '';
+            $card.append(
+                $('<div>').addClass('mb-2')
+                    .append($('<strong>').addClass('text-gray-700').text(field.name + ': '))
+                    .append($('<span>').addClass('text-gray-900').text(formatFieldValue(value, field)))
+            );
+        });
+
+        $details.append($card);
+    });
+
+    $dataArea.append($details);
 }
 
 // Close modal
@@ -470,19 +790,16 @@ function closeModal() {
 // Helper functions
 function getActionButtonClass(actionType) {
     switch(actionType) {
-        case 'create': return 'bg-green-600 hover:bg-green-700 text-white';
-        case 'update': return 'bg-blue-600 hover:bg-blue-700 text-white';
-        case 'delete': return 'bg-red-600 hover:bg-red-700 text-white';
+        case 'form': return 'bg-green-600 hover:bg-green-700 text-white';
         case 'list': return 'bg-indigo-600 hover:bg-indigo-700 text-white';
+        case 'view': return 'bg-blue-600 hover:bg-blue-700 text-white';
         default: return 'bg-gray-600 hover:bg-gray-700 text-white';
     }
 }
 
 function getActionIcon(actionType) {
     switch(actionType) {
-        case 'create': return 'fa-plus';
-        case 'update': return 'fa-edit';
-        case 'delete': return 'fa-trash';
+        case 'form': return 'fa-edit';
         case 'list': return 'fa-list';
         case 'view': return 'fa-eye';
         default: return 'fa-cog';
