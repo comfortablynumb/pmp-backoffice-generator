@@ -233,7 +233,6 @@ pub enum SortOrder {
     Descending,
 }
 
-
 /// Configuration specific to form actions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FormActionConfig {
@@ -270,7 +269,6 @@ pub enum FormMode {
     Update,
     Delete,
 }
-
 
 /// Field configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -466,14 +464,12 @@ pub enum FieldType {
 }
 
 /// Text field configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TextFieldConfig {
     pub min_length: Option<usize>,
     pub max_length: Option<usize>,
     pub pattern: Option<String>,
 }
-
 
 /// Number field configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -497,8 +493,7 @@ impl Default for NumberFieldConfig {
 }
 
 /// Password field configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PasswordFieldConfig {
     pub min_length: Option<usize>,
     pub max_length: Option<usize>,
@@ -512,29 +507,23 @@ pub struct PasswordFieldConfig {
     pub require_special: bool,
 }
 
-
 /// Date field configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DateFieldConfig {
     pub min_date: Option<String>,
     pub max_date: Option<String>,
     pub format: Option<String>,
 }
 
-
 /// Boolean field configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BooleanFieldConfig {
     pub true_label: Option<String>,
     pub false_label: Option<String>,
 }
 
-
 /// Select field configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SelectFieldConfig {
     pub options: Vec<SelectOption>,
     #[serde(default)]
@@ -542,7 +531,6 @@ pub struct SelectFieldConfig {
     #[serde(default)]
     pub searchable: bool,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SelectOption {
@@ -599,15 +587,13 @@ impl Default for EmailFieldConfig {
 }
 
 /// File field configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FileFieldConfig {
     pub accepted_types: Option<Vec<String>>,
     pub max_size_mb: Option<f64>,
     #[serde(default)]
     pub multiple: bool,
 }
-
 
 /// URL field configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -628,15 +614,13 @@ impl Default for UrlFieldConfig {
 }
 
 /// Phone field configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PhoneFieldConfig {
     pub format: Option<String>,
     pub country_code: Option<String>,
     pub allow_extensions: bool,
     pub validation_pattern: Option<String>,
 }
-
 
 /// Currency field configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

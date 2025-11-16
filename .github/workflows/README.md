@@ -14,14 +14,6 @@ Runs on every push to `main`/`master` and on pull requests.
 - **Test** - Executes all tests with `cargo test`
 - **Build** - Builds the project on stable and beta Rust versions
 
-### 🔒 Security Audit (security.yml)
-
-Runs on every push, pull request, and daily at midnight UTC.
-
-**Jobs:**
-- **Security Audit** - Scans dependencies for known vulnerabilities using `cargo-audit`
-- **Dependency Review** - Reviews dependency changes in pull requests
-
 ### 📊 Code Coverage (coverage.yml)
 
 Runs on every push to `main`/`master` and on pull requests.
@@ -69,7 +61,6 @@ Add these badges to your README.md:
 
 ```markdown
 [![CI](https://github.com/YOUR_USERNAME/pmp-backoffice-generator/workflows/CI/badge.svg)](https://github.com/YOUR_USERNAME/pmp-backoffice-generator/actions/workflows/ci.yml)
-[![Security Audit](https://github.com/YOUR_USERNAME/pmp-backoffice-generator/workflows/Security%20Audit/badge.svg)](https://github.com/YOUR_USERNAME/pmp-backoffice-generator/actions/workflows/security.yml)
 [![codecov](https://codecov.io/gh/YOUR_USERNAME/pmp-backoffice-generator/branch/main/graph/badge.svg)](https://codecov.io/gh/YOUR_USERNAME/pmp-backoffice-generator)
 ```
 
