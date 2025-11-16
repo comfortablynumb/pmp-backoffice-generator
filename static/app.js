@@ -381,11 +381,22 @@ function renderTable(data, fields, config, pagination) {
 
         visibleFields.forEach(function(field) {
             const value = row[field.id] || '';
-            $tr.append(
-                $('<td>')
-                    .addClass('px-6 py-4 whitespace-nowrap text-sm text-gray-900')
-                    .text(formatFieldValue(value, field))
-            );
+            const $cell = $('<td>')
+                .addClass('px-6 py-4 whitespace-nowrap text-sm text-gray-900')
+                .text(formatFieldValue(value, field))
+                .attr('data-field-id', field.id)
+                .attr('data-row-id', row.id || '');
+
+            // Add inline editing for editable fields
+            if (field.editable) {
+                $cell.addClass('editable-cell cursor-pointer hover:bg-blue-50')
+                    .attr('title', 'Double-click to edit')
+                    .on('dblclick', function() {
+                        makeInlineEditable($(this), field, row);
+                    });
+            }
+
+            $tr.append($cell);
         });
 
         // Action buttons for each row
@@ -2144,4 +2155,122 @@ function exportTableToCSV(data, fields) {
     document.body.removeChild(link);
 
     showSuccess(`Exported ${data.length} rows to CSV`);
+}
+
+// Inline editing functionality
+function makeInlineEditable($cell, field, row) {
+    // Don't edit if already editing
+    if ($cell.find('input, select, textarea').length > 0) {
+        return;
+    }
+
+    const originalValue = row[field.id] || '';
+    const formattedValue = formatFieldValue(originalValue, field);
+
+    // Create input based on field type
+    let $input;
+
+    if (field.field_type === 'boolean' || field.field_type === 'toggle') {
+        $input = $('<select>')
+            .addClass('w-full px-2 py-1 border border-indigo-500 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500')
+            .append($('<option>').val('false').text('No').prop('selected', !originalValue))
+            .append($('<option>').val('true').text('Yes').prop('selected', originalValue));
+    } else if (field.field_type === 'textarea') {
+        $input = $('<textarea>')
+            .addClass('w-full px-2 py-1 border border-indigo-500 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500')
+            .val(originalValue)
+            .attr('rows', 2);
+    } else {
+        let inputType = 'text';
+        if (field.field_type === 'number' || field.field_type === 'currency') {
+            inputType = 'number';
+        } else if (field.field_type === 'email') {
+            inputType = 'email';
+        } else if (field.field_type === 'date') {
+            inputType = 'date';
+        }
+
+        $input = $('<input>')
+            .attr('type', inputType)
+            .addClass('w-full px-2 py-1 border border-indigo-500 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500')
+            .val(originalValue);
+    }
+
+    // Save value function
+    function saveValue() {
+        let newValue = $input.val();
+
+        // Convert boolean string to actual boolean
+        if (field.field_type === 'boolean' || field.field_type === 'toggle') {
+            newValue = newValue === 'true';
+        } else if (field.field_type === 'number' || field.field_type === 'currency') {
+            newValue = parseFloat(newValue) || 0;
+        }
+
+        // Only save if value changed
+        if (newValue !== originalValue) {
+            // Update the row data
+            row[field.id] = newValue;
+
+            // Find update action
+            const updateAction = currentSection.actions.find(a =>
+                a.type === 'form' && a.config && a.config.form_mode === 'update'
+            );
+
+            if (updateAction) {
+                // Save to backend
+                const url = `/api/backoffices/${currentBackoffice.id}/sections/${currentSection.id}/actions/${updateAction.id}`;
+
+                $.ajax({
+                    url: url,
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(row),
+                    success: function() {
+                        $cell.text(formatFieldValue(newValue, field));
+                        $cell.addClass('bg-green-100');
+                        setTimeout(() => $cell.removeClass('bg-green-100'), 1000);
+                        showSuccess('Field updated successfully');
+                    },
+                    error: function(err) {
+                        $cell.text(formattedValue);
+                        showError('Failed to update: ' + (err.responseJSON?.error || err.responseText));
+                    }
+                });
+            } else {
+                // No update action, just update UI
+                $cell.text(formatFieldValue(newValue, field));
+                showWarning('Saved locally only (no update action configured)');
+            }
+        } else {
+            // Restore original text
+            $cell.text(formattedValue);
+        }
+    }
+
+    // Cancel editing function
+    function cancelEdit() {
+        $cell.text(formattedValue);
+    }
+
+    // Replace cell content with input
+    $cell.empty().append($input);
+    $input.focus().select();
+
+    // Save on Enter, cancel on Escape
+    $input.on('keydown', function(e) {
+        if (e.key === 'Enter' && field.field_type !== 'textarea') {
+            e.preventDefault();
+            saveValue();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelEdit();
+        }
+    });
+
+    // Save on blur (click outside)
+    $input.on('blur', function() {
+        // Small delay to allow Enter key to process first
+        setTimeout(saveValue, 100);
+    });
 }
