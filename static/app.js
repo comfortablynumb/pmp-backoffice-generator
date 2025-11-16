@@ -189,6 +189,20 @@ function renderTable(data, fields, config, pagination) {
     const $dataArea = $('#data-area');
     $dataArea.empty();
 
+    // Add search bar
+    const $searchContainer = $('<div>').addClass('mb-4 flex items-center gap-3');
+    const $searchInput = $('<input>')
+        .attr('type', 'text')
+        .attr('id', 'table-search')
+        .attr('placeholder', 'Search...')
+        .addClass('flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500');
+
+    const $searchIcon = $('<div>').addClass('flex items-center gap-2 text-gray-500');
+    $searchIcon.html('<i class="fas fa-search"></i>');
+
+    $searchContainer.append($searchIcon).append($searchInput);
+    $dataArea.append($searchContainer);
+
     // Render filters if configured
     if (config && config.filters && config.filters.length > 0) {
         renderFilters(config.filters);
@@ -276,6 +290,49 @@ function renderTable(data, fields, config, pagination) {
     const $tableContainer = $('<div>').addClass('table-container overflow-x-auto');
     $tableContainer.append($table);
     $dataArea.append($tableContainer);
+
+    // Add search functionality
+    $searchInput.on('input', function() {
+        const searchTerm = $(this).val().toLowerCase().trim();
+        let visibleCount = 0;
+
+        if (!searchTerm) {
+            // Show all rows if search is empty
+            $tbody.find('tr').show();
+            updateSearchResultsCount(data.length);
+            return;
+        }
+
+        // Filter table rows
+        $tbody.find('tr').each(function() {
+            const $row = $(this);
+            const rowText = $row.text().toLowerCase();
+
+            if (rowText.includes(searchTerm)) {
+                $row.show();
+                visibleCount++;
+            } else {
+                $row.hide();
+            }
+        });
+
+        updateSearchResultsCount(visibleCount);
+    });
+
+    // Add search results count indicator
+    const $searchCount = $('<div>')
+        .attr('id', 'search-results-count')
+        .addClass('text-sm text-gray-600 mt-2 hidden');
+    $searchContainer.append($searchCount);
+
+    function updateSearchResultsCount(count) {
+        const $count = $('#search-results-count');
+        if ($searchInput.val().trim()) {
+            $count.text(`Showing ${count} of ${data.length} results`).removeClass('hidden');
+        } else {
+            $count.addClass('hidden');
+        }
+    }
 
     // Render pagination if enabled
     if (pagination) {
