@@ -874,6 +874,307 @@ function createFieldInput(field, value) {
             }
             break;
 
+        case 'slug':
+            $input = $('<input>')
+                .attr('type', 'text')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono')
+                .val(value);
+
+            if (field.config?.max_length) {
+                $input.attr('maxlength', field.config.max_length);
+            }
+            break;
+
+        case 'weekday':
+            const weekdayFormat = field.config?.format || 'long';
+            const weekdays = weekdayFormat === 'short'
+                ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+                : weekdayFormat === 'number'
+                ? ['1', '2', '3', '4', '5', '6', '7']
+                : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+            if (field.config?.multiple) {
+                $input = $('<select>')
+                    .attr('id', field.id)
+                    .attr('name', field.id)
+                    .attr('multiple', true)
+                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500');
+
+                weekdays.forEach((day, idx) => {
+                    $input.append($('<option>')
+                        .val(idx + 1)
+                        .text(day)
+                    );
+                });
+            } else {
+                $input = $('<select>')
+                    .attr('id', field.id)
+                    .attr('name', field.id)
+                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500');
+
+                weekdays.forEach((day, idx) => {
+                    $input.append($('<option>')
+                        .val(idx + 1)
+                        .text(day)
+                        .prop('selected', (idx + 1) == value)
+                    );
+                });
+            }
+            break;
+
+        case 'month':
+            const monthFormat = field.config?.format || 'long';
+            const months = monthFormat === 'short'
+                ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                : monthFormat === 'number'
+                ? ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
+                : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+            if (field.config?.multiple) {
+                $input = $('<select>')
+                    .attr('id', field.id)
+                    .attr('name', field.id)
+                    .attr('multiple', true)
+                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500');
+
+                months.forEach((month, idx) => {
+                    $input.append($('<option>')
+                        .val(idx + 1)
+                        .text(month)
+                    );
+                });
+            } else {
+                $input = $('<select>')
+                    .attr('id', field.id)
+                    .attr('name', field.id)
+                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500');
+
+                months.forEach((month, idx) => {
+                    $input.append($('<option>')
+                        .val(idx + 1)
+                        .text(month)
+                        .prop('selected', (idx + 1) == value)
+                    );
+                });
+            }
+            break;
+
+        case 'geolocation':
+            const $geoWrapper = $('<div>');
+            const latValue = value?.lat || value?.latitude || '';
+            const lngValue = value?.lng || value?.longitude || '';
+
+            const $latInput = $('<input>')
+                .attr('type', 'number')
+                .attr('step', '0.000001')
+                .attr('id', field.id + '-lat')
+                .attr('placeholder', 'Latitude')
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-2')
+                .val(latValue);
+
+            const $lngInput = $('<input>')
+                .attr('type', 'number')
+                .attr('step', '0.000001')
+                .attr('id', field.id + '-lng')
+                .attr('placeholder', 'Longitude')
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                .val(lngValue);
+
+            $input = $('<input>')
+                .attr('type', 'hidden')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .val(value ? JSON.stringify(value) : '');
+
+            function updateGeoValue() {
+                const lat = parseFloat($latInput.val());
+                const lng = parseFloat($lngInput.val());
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    $input.val(JSON.stringify({ lat, lng }));
+                }
+            }
+
+            $latInput.on('change', updateGeoValue);
+            $lngInput.on('change', updateGeoValue);
+
+            $geoWrapper.append($latInput).append($lngInput).append($input);
+            $input = $geoWrapper;
+            break;
+
+        case 'duration':
+            const durationFormat = field.config?.format || 'hoursminutes';
+
+            if (durationFormat === 'hoursminutes') {
+                const $durationWrapper = $('<div>').addClass('flex gap-2');
+                const hours = Math.floor((value || 0) / 60);
+                const minutes = (value || 0) % 60;
+
+                const $hoursInput = $('<input>')
+                    .attr('type', 'number')
+                    .attr('min', '0')
+                    .attr('id', field.id + '-hours')
+                    .attr('placeholder', 'Hours')
+                    .addClass('w-1/2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                    .val(hours);
+
+                const $minutesInput = $('<input>')
+                    .attr('type', 'number')
+                    .attr('min', '0')
+                    .attr('max', '59')
+                    .attr('id', field.id + '-minutes')
+                    .attr('placeholder', 'Minutes')
+                    .addClass('w-1/2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                    .val(minutes);
+
+                $input = $('<input>')
+                    .attr('type', 'hidden')
+                    .attr('id', field.id)
+                    .attr('name', field.id)
+                    .val(value || 0);
+
+                function updateDuration() {
+                    const h = parseInt($hoursInput.val()) || 0;
+                    const m = parseInt($minutesInput.val()) || 0;
+                    $input.val(h * 60 + m);
+                }
+
+                $hoursInput.on('change', updateDuration);
+                $minutesInput.on('change', updateDuration);
+
+                $durationWrapper.append($hoursInput).append($minutesInput).append($input);
+                $input = $durationWrapper;
+            } else {
+                $input = $('<input>')
+                    .attr('type', 'number')
+                    .attr('id', field.id)
+                    .attr('name', field.id)
+                    .attr('min', '0')
+                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                    .val(value);
+            }
+            break;
+
+        case 'percentage':
+            const $percentWrapper = $('<div>').addClass('relative');
+
+            $input = $('<input>')
+                .attr('type', 'number')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full pr-8 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                .val(value);
+
+            if (field.config?.min !== undefined) {
+                $input.attr('min', field.config.min);
+            }
+            if (field.config?.max !== undefined) {
+                $input.attr('max', field.config.max);
+            }
+            if (field.config?.step !== undefined) {
+                $input.attr('step', field.config.step);
+            }
+
+            const $percentSymbol = $('<span>')
+                .addClass('absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500')
+                .text('%');
+
+            $percentWrapper.append($input).append($percentSymbol);
+            $input = $percentWrapper;
+            break;
+
+        case 'code':
+            $input = $('<textarea>')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm bg-gray-50')
+                .attr('rows', 10)
+                .val(value);
+
+            if (field.config?.min_lines) {
+                $input.attr('rows', Math.max(10, field.config.min_lines));
+            }
+            break;
+
+        case 'markdown':
+            const $markdownWrapper = $('<div>');
+
+            $input = $('<textarea>')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono')
+                .attr('rows', 8)
+                .val(value);
+
+            if (field.config?.min_length) {
+                $input.attr('minlength', field.config.min_length);
+            }
+            if (field.config?.max_length) {
+                $input.attr('maxlength', field.config.max_length);
+            }
+
+            if (field.config?.enable_preview) {
+                const $previewBtn = $('<button>')
+                    .attr('type', 'button')
+                    .addClass('mt-2 px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm')
+                    .text('Toggle Preview')
+                    .click(function() {
+                        const $preview = $('#' + field.id + '-preview');
+                        if ($preview.is(':visible')) {
+                            $preview.hide();
+                            $input.show();
+                        } else {
+                            $preview.html(marked ? marked.parse($input.val()) : $input.val()).show();
+                            $input.hide();
+                        }
+                    });
+
+                const $preview = $('<div>')
+                    .attr('id', field.id + '-preview')
+                    .addClass('w-full px-3 py-2 border border-gray-300 rounded-md bg-white prose max-w-none')
+                    .hide();
+
+                $markdownWrapper.append($input).append($previewBtn).append($preview);
+                $input = $markdownWrapper;
+            } else {
+                $input = $('<div>').append($input);
+            }
+            break;
+
+        case 'richtext':
+            $input = $('<textarea>')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500')
+                .attr('rows', 8)
+                .val(value);
+
+            if (field.config?.min_length) {
+                $input.attr('minlength', field.config.min_length);
+            }
+            if (field.config?.max_length) {
+                $input.attr('maxlength', field.config.max_length);
+            }
+            break;
+
+        case 'ipaddress':
+            $input = $('<input>')
+                .attr('type', 'text')
+                .attr('id', field.id)
+                .attr('name', field.id)
+                .addClass('w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono')
+                .val(value);
+
+            const ipVersion = field.config?.version || 'v4';
+            if (ipVersion === 'v4') {
+                $input.attr('placeholder', '192.168.1.1');
+                $input.attr('pattern', '^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$');
+            } else if (ipVersion === 'v6') {
+                $input.attr('placeholder', '2001:0db8:85a3:0000:0000:8a2e:0370:7334');
+            }
+            break;
+
         default: // text
             $input = $('<input>')
                 .attr('type', 'text')
@@ -938,6 +1239,32 @@ function submitForm(action, existingData = {}) {
             case 'range':
                 const rangeValue = $('#' + field.id).val();
                 data[field.id] = rangeValue ? parseFloat(rangeValue) : 0;
+                break;
+            case 'percentage':
+                const percentageValue = $('#' + field.id).val();
+                data[field.id] = percentageValue ? parseFloat(percentageValue) : 0;
+                break;
+            case 'geolocation':
+                try {
+                    const geoValue = $('#' + field.id).val();
+                    data[field.id] = geoValue ? JSON.parse(geoValue) : null;
+                } catch (e) {
+                    console.error('Invalid geolocation for field ' + field.id, e);
+                    data[field.id] = null;
+                }
+                break;
+            case 'duration':
+                const durationValue = $('#' + field.id).val();
+                data[field.id] = durationValue ? parseInt(durationValue) : 0;
+                break;
+            case 'weekday':
+            case 'month':
+                const selectValue = $('#' + field.id).val();
+                if (field.config?.multiple) {
+                    data[field.id] = selectValue ? selectValue.map(v => parseInt(v)) : [];
+                } else {
+                    data[field.id] = selectValue ? parseInt(selectValue) : null;
+                }
                 break;
         }
     });

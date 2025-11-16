@@ -48,6 +48,29 @@ pub enum DataSourceConfig {
         headers: Option<HashMap<String, String>>,
         auth: Option<ApiAuthConfig>,
     },
+    #[serde(rename = "graphql")]
+    GraphQL {
+        endpoint: String,
+        headers: Option<HashMap<String, String>>,
+        auth: Option<ApiAuthConfig>,
+    },
+    #[serde(rename = "mongodb")]
+    MongoDB {
+        connection_string: String,
+        database: String,
+        collection: String,
+    },
+    #[serde(rename = "redis")]
+    Redis {
+        connection_string: String,
+        key_prefix: Option<String>,
+    },
+    #[serde(rename = "elasticsearch")]
+    Elasticsearch {
+        nodes: Vec<String>,
+        index: String,
+        auth: Option<ApiAuthConfig>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -326,6 +349,46 @@ pub enum FieldType {
     Json {
         #[serde(default)]
         config: JsonFieldConfig,
+    },
+    Slug {
+        #[serde(default)]
+        config: SlugFieldConfig,
+    },
+    Weekday {
+        #[serde(default)]
+        config: WeekdayFieldConfig,
+    },
+    Month {
+        #[serde(default)]
+        config: MonthFieldConfig,
+    },
+    Geolocation {
+        #[serde(default)]
+        config: GeolocationFieldConfig,
+    },
+    Duration {
+        #[serde(default)]
+        config: DurationFieldConfig,
+    },
+    Percentage {
+        #[serde(default)]
+        config: PercentageFieldConfig,
+    },
+    Code {
+        #[serde(default)]
+        config: CodeFieldConfig,
+    },
+    Markdown {
+        #[serde(default)]
+        config: MarkdownFieldConfig,
+    },
+    RichText {
+        #[serde(default)]
+        config: RichTextFieldConfig,
+    },
+    IpAddress {
+        #[serde(default)]
+        config: IpAddressFieldConfig,
     },
 }
 
@@ -766,6 +829,264 @@ impl Default for JsonFieldConfig {
     }
 }
 
+/// Slug field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlugFieldConfig {
+    pub source_field: Option<String>,
+    pub separator: String,
+    pub lowercase: bool,
+    pub max_length: Option<usize>,
+    pub allow_unicode: bool,
+}
+
+impl Default for SlugFieldConfig {
+    fn default() -> Self {
+        Self {
+            source_field: None,
+            separator: "-".to_string(),
+            lowercase: true,
+            max_length: Some(100),
+            allow_unicode: false,
+        }
+    }
+}
+
+/// Weekday field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WeekdayFieldConfig {
+    pub format: WeekdayFormat,
+    pub start_day: Option<String>,
+    pub multiple: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WeekdayFormat {
+    Short,   // Mon, Tue, Wed
+    Long,    // Monday, Tuesday, Wednesday
+    Number,  // 1-7
+}
+
+impl Default for WeekdayFieldConfig {
+    fn default() -> Self {
+        Self {
+            format: WeekdayFormat::Long,
+            start_day: Some("monday".to_string()),
+            multiple: false,
+        }
+    }
+}
+
+/// Month field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MonthFieldConfig {
+    pub format: MonthFormat,
+    pub multiple: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MonthFormat {
+    Short,   // Jan, Feb, Mar
+    Long,    // January, February, March
+    Number,  // 1-12
+}
+
+impl Default for MonthFieldConfig {
+    fn default() -> Self {
+        Self {
+            format: MonthFormat::Long,
+            multiple: false,
+        }
+    }
+}
+
+/// Geolocation field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeolocationFieldConfig {
+    pub enable_map: bool,
+    pub default_zoom: u8,
+    pub min_lat: Option<f64>,
+    pub max_lat: Option<f64>,
+    pub min_lng: Option<f64>,
+    pub max_lng: Option<f64>,
+    pub enable_geocoding: bool,
+}
+
+impl Default for GeolocationFieldConfig {
+    fn default() -> Self {
+        Self {
+            enable_map: true,
+            default_zoom: 13,
+            min_lat: Some(-90.0),
+            max_lat: Some(90.0),
+            min_lng: Some(-180.0),
+            max_lng: Some(180.0),
+            enable_geocoding: false,
+        }
+    }
+}
+
+/// Duration field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DurationFieldConfig {
+    pub format: DurationFormat,
+    pub min_duration: Option<u32>,
+    pub max_duration: Option<u32>,
+    pub step_minutes: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DurationFormat {
+    HoursMinutes,    // 2h 30m
+    Minutes,         // 150 minutes
+    Seconds,         // 9000 seconds
+}
+
+impl Default for DurationFieldConfig {
+    fn default() -> Self {
+        Self {
+            format: DurationFormat::HoursMinutes,
+            min_duration: None,
+            max_duration: None,
+            step_minutes: Some(15),
+        }
+    }
+}
+
+/// Percentage field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PercentageFieldConfig {
+    pub min: f64,
+    pub max: f64,
+    pub step: f64,
+    pub decimal_places: usize,
+    pub show_slider: bool,
+}
+
+impl Default for PercentageFieldConfig {
+    fn default() -> Self {
+        Self {
+            min: 0.0,
+            max: 100.0,
+            step: 1.0,
+            decimal_places: 0,
+            show_slider: false,
+        }
+    }
+}
+
+/// Code field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeFieldConfig {
+    pub language: String,
+    pub theme: CodeTheme,
+    pub line_numbers: bool,
+    pub min_lines: Option<usize>,
+    pub max_lines: Option<usize>,
+    pub read_only: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CodeTheme {
+    Light,
+    Dark,
+    Monokai,
+    Github,
+}
+
+impl Default for CodeFieldConfig {
+    fn default() -> Self {
+        Self {
+            language: "javascript".to_string(),
+            theme: CodeTheme::Github,
+            line_numbers: true,
+            min_lines: None,
+            max_lines: None,
+            read_only: false,
+        }
+    }
+}
+
+/// Markdown field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarkdownFieldConfig {
+    pub min_length: Option<usize>,
+    pub max_length: Option<usize>,
+    pub enable_preview: bool,
+    pub enable_toolbar: bool,
+    pub allowed_elements: Option<Vec<String>>,
+}
+
+impl Default for MarkdownFieldConfig {
+    fn default() -> Self {
+        Self {
+            min_length: None,
+            max_length: None,
+            enable_preview: true,
+            enable_toolbar: true,
+            allowed_elements: None,
+        }
+    }
+}
+
+/// Rich text field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RichTextFieldConfig {
+    pub min_length: Option<usize>,
+    pub max_length: Option<usize>,
+    pub toolbar_items: Vec<String>,
+    pub allow_images: bool,
+    pub allow_links: bool,
+    pub allow_tables: bool,
+}
+
+impl Default for RichTextFieldConfig {
+    fn default() -> Self {
+        Self {
+            min_length: None,
+            max_length: None,
+            toolbar_items: vec![
+                "bold".to_string(),
+                "italic".to_string(),
+                "underline".to_string(),
+                "list".to_string(),
+            ],
+            allow_images: true,
+            allow_links: true,
+            allow_tables: false,
+        }
+    }
+}
+
+/// IP Address field configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IpAddressFieldConfig {
+    pub version: IpVersion,
+    pub allow_private: bool,
+    pub allow_loopback: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum IpVersion {
+    V4,
+    V6,
+    Both,
+}
+
+impl Default for IpAddressFieldConfig {
+    fn default() -> Self {
+        Self {
+            version: IpVersion::V4,
+            allow_private: true,
+            allow_loopback: false,
+        }
+    }
+}
+
 /// Custom validation rule
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationRule {
@@ -811,6 +1132,30 @@ pub enum ValidationType {
     MatchField {
         field: String,
     },
+    CreditCard,
+    Ipv4,
+    Ipv6,
+    Uuid,
+    DateRange {
+        start_field: String,
+        end_field: String,
+    },
+    FileSize {
+        max_size_mb: f64,
+    },
+    FileType {
+        allowed_types: Vec<String>,
+    },
+    StrongPassword {
+        min_length: usize,
+        require_uppercase: bool,
+        require_lowercase: bool,
+        require_number: bool,
+        require_special: bool,
+    },
+    AlphaNumeric,
+    Luhn,
+    MacAddress,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
