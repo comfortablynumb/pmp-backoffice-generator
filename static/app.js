@@ -189,7 +189,7 @@ function renderTable(data, fields, config, pagination) {
     const $dataArea = $('#data-area');
     $dataArea.empty();
 
-    // Add search bar
+    // Add search bar and export button
     const $searchContainer = $('<div>').addClass('mb-4 flex items-center gap-3');
     const $searchInput = $('<input>')
         .attr('type', 'text')
@@ -200,7 +200,15 @@ function renderTable(data, fields, config, pagination) {
     const $searchIcon = $('<div>').addClass('flex items-center gap-2 text-gray-500');
     $searchIcon.html('<i class="fas fa-search"></i>');
 
-    $searchContainer.append($searchIcon).append($searchInput);
+    // Add CSV export button
+    const $exportBtn = $('<button>')
+        .addClass('px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2')
+        .html('<i class="fas fa-download"></i> Export CSV')
+        .click(function() {
+            exportTableToCSV(data, fields);
+        });
+
+    $searchContainer.append($searchIcon).append($searchInput).append($exportBtn);
     $dataArea.append($searchContainer);
 
     // Render filters if configured
@@ -1941,4 +1949,67 @@ function showWarning(message) {
 function showInfo(message) {
     showToast(message, 'info', 4000);
     console.info(message);
+}
+
+// Export table data to CSV
+function exportTableToCSV(data, fields) {
+    if (!data || data.length === 0) {
+        showWarning('No data to export');
+        return;
+    }
+
+    const visibleFields = fields.filter(f => f.visible);
+
+    // Create CSV header
+    const headers = visibleFields.map(f => f.name);
+    const csvRows = [];
+    csvRows.push(headers.join(','));
+
+    // Add data rows
+    data.forEach(row => {
+        const values = visibleFields.map(field => {
+            let value = row[field.id] || '';
+
+            // Format value based on field type
+            if (field.field_type === 'boolean') {
+                value = value ? 'Yes' : 'No';
+            } else if (field.field_type === 'date' || field.field_type === 'datetime') {
+                value = value ? new Date(value).toLocaleString() : '';
+            } else if (typeof value === 'object') {
+                value = JSON.stringify(value);
+            }
+
+            // Escape quotes and wrap in quotes if contains comma, quote, or newline
+            value = String(value).replace(/"/g, '""');
+            if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+                value = `"${value}"`;
+            }
+
+            return value;
+        });
+
+        csvRows.push(values.join(','));
+    });
+
+    // Create CSV content
+    const csvContent = csvRows.join('\n');
+
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const sectionName = currentSection ? currentSection.name.toLowerCase().replace(/\s+/g, '-') : 'data';
+    link.setAttribute('download', `${sectionName}-export-${timestamp}.csv`);
+
+    // Trigger download
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showSuccess(`Exported ${data.length} rows to CSV`);
 }
