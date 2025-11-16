@@ -39,6 +39,8 @@ pub async fn start_server(config: AppConfig, backoffices: Vec<BackofficeConfig>)
             "/api/backoffices/:backoffice_id/sections/:section_id/actions/:action_id",
             get(execute_action_handler).post(execute_mutation_handler),
         )
+        .route("/api/docs", get(api_docs_handler))
+        .route("/openapi.yaml", get(openapi_spec_handler))
         .nest_service("/static", ServeDir::new("static"))
         .with_state(state);
 
@@ -55,6 +57,52 @@ pub async fn start_server(config: AppConfig, backoffices: Vec<BackofficeConfig>)
 /// Serve the main HTML page
 async fn index_handler() -> impl IntoResponse {
     Html(include_str!("../static/index.html"))
+}
+
+/// Serve OpenAPI specification
+async fn openapi_spec_handler() -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        [("content-type", "application/x-yaml")],
+        include_str!("../openapi.yaml"),
+    )
+}
+
+/// Serve Swagger UI for API documentation
+async fn api_docs_handler() -> impl IntoResponse {
+    Html(r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Documentation - PMP Backoffice Generator</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.onload = function() {
+            window.ui = SwaggerUIBundle({
+                url: '/openapi.yaml',
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout"
+            });
+        };
+    </script>
+</body>
+</html>
+    "#)
 }
 
 /// Get application configuration

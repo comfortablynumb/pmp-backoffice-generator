@@ -1,0 +1,516 @@
+openapi: 3.0.3
+info:
+  title: PMP Backoffice Generator API
+  description: |
+    Dynamic backoffice generator that creates admin interfaces from YAML configuration files.
+
+    This API provides endpoints to:
+    - Retrieve application configuration
+    - List and access backoffice definitions
+    - Execute CRUD operations on data sources
+    - Manage dynamic forms and actions
+
+    ## Features
+    - **30+ Field Types**: Text, email, URL, phone, rich text, color picker, signature, and more
+    - **24+ Validations**: ISBN, IBAN, credit card, IP addresses, coordinates, and more
+    - **10+ Data Sources**: Database, REST API, GraphQL, MongoDB, Redis, and more
+
+  version: 0.1.0
+  contact:
+    name: API Support
+    url: https://github.com/YOUR_USERNAME/pmp-backoffice-generator
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+  - url: https://api.example.com
+    description: Production server
+
+tags:
+  - name: Configuration
+    description: Application and backoffice configuration endpoints
+  - name: Backoffices
+    description: Backoffice management endpoints
+  - name: Actions
+    description: Execute data operations (CRUD)
+
+paths:
+  /:
+    get:
+      summary: Get main UI
+      description: Returns the main HTML interface for the backoffice generator
+      tags:
+        - UI
+      responses:
+        '200':
+          description: HTML page
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /api/config:
+    get:
+      summary: Get application configuration
+      description: Returns the main application configuration including server settings and security options
+      tags:
+        - Configuration
+      responses:
+        '200':
+          description: Application configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppConfig'
+
+  /api/backoffices:
+    get:
+      summary: List all backoffices
+      description: Returns a list of all configured backoffice interfaces
+      tags:
+        - Backoffices
+      responses:
+        '200':
+          description: List of backoffices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BackofficeConfig'
+
+  /api/backoffices/{id}:
+    get:
+      summary: Get specific backoffice
+      description: Returns the configuration for a specific backoffice by ID
+      tags:
+        - Backoffices
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Backoffice ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Backoffice configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackofficeConfig'
+        '404':
+          description: Backoffice not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/backoffices/{backoffice_id}/sections/{section_id}/actions/{action_id}:
+    get:
+      summary: Execute query action
+      description: |
+        Execute a read-only action (list, view, custom) to retrieve data from the configured data source.
+        Supports pagination, filtering, and sorting for list actions.
+      tags:
+        - Actions
+      parameters:
+        - name: backoffice_id
+          in: path
+          required: true
+          description: Backoffice ID
+          schema:
+            type: string
+        - name: section_id
+          in: path
+          required: true
+          description: Section ID
+          schema:
+            type: string
+        - name: action_id
+          in: path
+          required: true
+          description: Action ID
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: Page number for pagination (list actions)
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          description: Number of items per page (list actions)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sort_by
+          in: query
+          description: Field to sort by
+          schema:
+            type: string
+        - name: sort_order
+          in: query
+          description: Sort order
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        '200':
+          description: Action result
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ListActionResponse'
+                  - $ref: '#/components/schemas/ViewActionResponse'
+                  - $ref: '#/components/schemas/FormActionResponse'
+        '404':
+          description: Backoffice, section, or action not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: Execute mutation action
+      description: |
+        Execute a write action (create, update, delete) to modify data in the configured data source.
+      tags:
+        - Actions
+      parameters:
+        - name: backoffice_id
+          in: path
+          required: true
+          description: Backoffice ID
+          schema:
+            type: string
+        - name: section_id
+          in: path
+          required: true
+          description: Section ID
+          schema:
+            type: string
+        - name: action_id
+          in: path
+          required: true
+          description: Action ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        description: Data to be created/updated/deleted
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Mutation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    additionalProperties: true
+        '404':
+          description: Backoffice, section, or action not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    AppConfig:
+      type: object
+      properties:
+        server:
+          type: object
+          properties:
+            host:
+              type: string
+              example: "0.0.0.0"
+            port:
+              type: integer
+              example: 3000
+        security:
+          type: object
+          nullable: true
+          properties:
+            enabled:
+              type: boolean
+            jwt_secret:
+              type: string
+              nullable: true
+
+    BackofficeConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "users"
+        name:
+          type: string
+          example: "User Management"
+        description:
+          type: string
+          nullable: true
+        data_sources:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/DataSourceConfig'
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectionConfig'
+
+    DataSourceConfig:
+      oneOf:
+        - $ref: '#/components/schemas/DatabaseSource'
+        - $ref: '#/components/schemas/ApiSource'
+        - $ref: '#/components/schemas/GraphQLSource'
+        - $ref: '#/components/schemas/MongoDBSource'
+
+    DatabaseSource:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [database]
+        connection_string:
+          type: string
+          example: "postgresql://user:pass@localhost/db"
+        db_type:
+          type: string
+          enum: [postgres, mysql, sqlite]
+
+    ApiSource:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [api]
+        base_url:
+          type: string
+          example: "https://api.example.com"
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          nullable: true
+        auth:
+          type: object
+          nullable: true
+
+    GraphQLSource:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [graphql]
+        endpoint:
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          nullable: true
+
+    MongoDBSource:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [mongodb]
+        connection_string:
+          type: string
+        database:
+          type: string
+
+    SectionConfig:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        icon:
+          type: string
+          nullable: true
+          example: "fa-users"
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActionConfig'
+
+    ActionConfig:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        action_type:
+          type: string
+          enum: [list, form, view, custom]
+        data_source:
+          type: string
+        required_scopes:
+          type: array
+          items:
+            type: string
+        query:
+          type: string
+          nullable: true
+        endpoint:
+          type: string
+          nullable: true
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldConfig'
+
+    FieldConfig:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        field_type:
+          type: string
+          enum:
+            - text
+            - textarea
+            - number
+            - email
+            - password
+            - tel
+            - url
+            - date
+            - datetime
+            - time
+            - boolean
+            - select
+            - radio
+            - checkbox
+            - toggle
+            - tags
+            - multiselect
+            - richtext
+            - markdown
+            - code
+            - json
+            - html
+            - file
+            - image
+            - video
+            - audio
+            - signature
+            - color
+            - rating
+            - slider
+            - geolocation
+            - currency
+            - percentage
+        required:
+          type: boolean
+          default: false
+        editable:
+          type: boolean
+          default: true
+        visible:
+          type: boolean
+          default: true
+        default_value:
+          nullable: true
+        placeholder:
+          type: string
+          nullable: true
+        help_text:
+          type: string
+          nullable: true
+        validations:
+          type: array
+          items:
+            type: object
+
+    ListActionResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldConfig'
+        config:
+          type: object
+        pagination:
+          type: object
+          nullable: true
+          properties:
+            page:
+              type: integer
+            page_size:
+              type: integer
+            total_items:
+              type: integer
+            total_pages:
+              type: integer
+
+    ViewActionResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldConfig'
+
+    FormActionResponse:
+      type: object
+      properties:
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldConfig'
+        config:
+          type: object
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Resource not found"
