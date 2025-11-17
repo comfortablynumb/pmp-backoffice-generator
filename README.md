@@ -4,16 +4,47 @@ A powerful, dynamic Rust application that generates multiple backoffice UIs from
 
 [![CI](https://github.com/YOUR_USERNAME/pmp-backoffice-generator/workflows/CI/badge.svg)](https://github.com/YOUR_USERNAME/pmp-backoffice-generator/actions/workflows/ci.yml)
 
-## Features
+## ✨ Features
 
+### Core Features
 - **Dynamic UI Generation**: Create unlimited backoffice interfaces from YAML files
 - **30+ Field Types**: Text, email, URL, phone, rich text, color picker, signature, video, audio, JSON, markdown, and more
 - **24+ Validation Types**: ISBN, IBAN, credit card, IP addresses, MAC addresses, coordinates, and more
 - **10+ Data Sources**: Database, REST API, GraphQL, MongoDB, Redis, Elasticsearch, gRPC, Kafka, S3, Firebase, Supabase, WebSocket
 - **CRUD Operations**: Built-in support for List, Create, Update, Delete, and View actions
 - **Scope-based Authorization**: Define required scopes for each action
-- **Modern UI**: Responsive design using Tailwind CSS
-- **Docker Support**: Easy deployment with Docker and docker-compose
+
+### UI/UX Features
+- 🎨 **Dark Mode**: Toggle-able dark theme with localStorage persistence
+- 🔍 **Real-time Search**: Instant filtering across all table columns
+- 📊 **Column Sorting**: Multi-column sorting with visual indicators
+- 📝 **Inline Editing**: Double-click to edit cells directly in tables
+- 🎯 **Advanced Filtering**: Column-based filters with multiple operators
+- 💾 **Filter Presets**: Save and load filter configurations
+- 🔔 **Toast Notifications**: Modern notification system (success, error, warning, info)
+- ⌨️ **Keyboard Shortcuts**: Power-user shortcuts for common actions
+
+### Bulk Operations
+- ☑️ **Bulk Selection**: Select multiple rows with checkboxes
+- 🗑️ **Bulk Delete**: Delete multiple records at once
+- 📤 **Bulk Export**: Export selected rows to CSV
+- 📥 **CSV Import**: Import data from CSV files
+- 📊 **Progress Indicators**: Real-time progress tracking for bulk operations
+
+### Developer Features
+- 🐳 **Docker Support**: Easy deployment with Docker and docker-compose
+- 📚 **OpenAPI/Swagger**: Interactive API documentation at `/api/docs`
+- 🧪 **Unit & Integration Tests**: Comprehensive test coverage
+- 🔧 **Modern Stack**: Rust, Axum, Tailwind CSS, jQuery
+- 📖 **Extensive Documentation**: Complete guides and examples
+
+## 📖 Documentation
+
+- **[Quick Start Guide](docs/QUICK_START.md)** - Get started in 5 minutes
+- **[Complete Feature Documentation](docs/FEATURES.md)** - All field types, validations, and data sources with examples
+- **[Real-World Examples](docs/EXAMPLES.md)** - Production-ready configurations for common use cases
+- **[API Documentation](http://localhost:3000/api/docs)** - Interactive Swagger UI (when running)
+- **[OpenAPI Specification](openapi.yaml)** - Full API spec in OpenAPI 3.0 format
 
 ## Quick Start
 
