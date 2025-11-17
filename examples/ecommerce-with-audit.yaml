@@ -1,0 +1,610 @@
+id: ecommerce
+name: E-Commerce Platform
+description: Complete e-commerce system with relationships, audit trails, and full history tracking
+
+data_sources:
+  main_db:
+    type: database
+    connection_string: postgresql://user:pass@localhost/ecommerce
+    db_type: postgres
+
+# Define relationships
+relationships:
+  # Customer Orders (One-to-Many)
+  - id: customer_orders
+    name: Customer Orders
+    relationship_type: onetomany
+    from_section: customers
+    from_field: id
+    to_section: orders
+    to_field: customer_id
+    cascade_delete: false  # Keep orders even if customer deleted
+    display_in_form: true
+    display_in_list: true
+    display_fields: ["id", "order_number", "total", "status", "created_at"]
+
+  # Order Items (One-to-Many)
+  - id: order_items
+    name: Order Items
+    relationship_type: onetomany
+    from_section: orders
+    from_field: id
+    to_section: order_items
+    to_field: order_id
+    cascade_delete: true  # Delete items when order deleted
+    display_in_form: true
+    display_in_list: true
+    display_fields: ["id", "product_id", "quantity", "price", "subtotal"]
+
+  # Product Order Items (One-to-Many)
+  - id: product_order_items
+    name: Product Sales
+    relationship_type: onetomany
+    from_section: products
+    from_field: id
+    to_section: order_items
+    to_field: product_id
+    cascade_delete: false
+    display_in_form: true
+    display_in_list: true
+    display_fields: ["id", "order_id", "quantity", "price"]
+
+  # Product Category (Many-to-One)
+  - id: product_category
+    name: Product Category
+    relationship_type: manytoone
+    from_section: products
+    from_field: category_id
+    to_section: categories
+    to_field: id
+    cascade_delete: false
+    display_in_form: true
+    display_in_list: true
+    display_fields: ["id", "name"]
+
+  # Customer Addresses (One-to-Many)
+  - id: customer_addresses
+    name: Customer Addresses
+    relationship_type: onetomany
+    from_section: customers
+    from_field: id
+    to_section: addresses
+    to_field: customer_id
+    cascade_delete: true
+    display_in_form: true
+    display_in_list: true
+    display_fields: ["id", "type", "street", "city", "country"]
+
+sections:
+  # Customers with Full Audit
+  - id: customers
+    name: Customers
+    icon: fa-users
+    audit:
+      track_changes: true
+      track_created: true
+      track_updated: true
+      track_deleted: true
+      enable_rollback: true
+      retention_days: 2555  # 7 years for compliance
+      created_by_field: created_by
+      updated_by_field: updated_by
+      created_at_field: created_at
+      updated_at_field: updated_at
+    actions:
+      - id: list_customers
+        name: List Customers
+        type: list
+        data_source: main_db
+        query: "SELECT * FROM customers ORDER BY created_at DESC"
+        required_scopes: []
+        fields:
+          - id: id
+            name: Customer ID
+            field_type: number
+            visible: true
+            editable: false
+          - id: email
+            name: Email
+            field_type: email
+            visible: true
+            required: true
+            validations:
+              - type: email
+              - type: unique_in
+                field_list: ["email"]
+                message: Email must be unique
+          - id: first_name
+            name: First Name
+            field_type: text
+            visible: true
+            required: true
+          - id: last_name
+            name: Last Name
+            field_type: text
+            visible: true
+            required: true
+          - id: phone
+            name: Phone
+            field_type: phone
+            visible: true
+            config:
+              format: international
+              allow_extensions: false
+          - id: status
+            name: Status
+            field_type: select
+            visible: true
+            required: true
+            config:
+              options:
+                - value: active
+                  label: Active
+                - value: inactive
+                  label: Inactive
+                - value: blocked
+                  label: Blocked
+          - id: total_spent
+            name: Total Spent
+            field_type: currency
+            visible: true
+            editable: false
+            config:
+              currency_code: USD
+              symbol: "$"
+              decimal_places: 2
+          - id: created_at
+            name: Created
+            field_type: datetime
+            visible: true
+            editable: false
+          - id: created_by
+            name: Created By
+            field_type: text
+            visible: false
+            editable: false
+          - id: updated_at
+            name: Updated
+            field_type: datetime
+            visible: true
+            editable: false
+          - id: updated_by
+            name: Updated By
+            field_type: text
+            visible: false
+            editable: false
+
+  # Orders with Full Audit Trail
+  - id: orders
+    name: Orders
+    icon: fa-shopping-cart
+    audit:
+      track_changes: true
+      track_created: true
+      track_updated: true
+      track_deleted: true
+      enable_rollback: true
+      retention_days: 2555  # 7 years for tax compliance
+      created_by_field: created_by
+      updated_by_field: updated_by
+      created_at_field: created_at
+      updated_at_field: updated_at
+    actions:
+      - id: list_orders
+        name: List Orders
+        type: list
+        data_source: main_db
+        query: "SELECT * FROM orders ORDER BY created_at DESC"
+        required_scopes: []
+        fields:
+          - id: id
+            name: Order ID
+            field_type: number
+            visible: true
+            editable: false
+          - id: order_number
+            name: Order Number
+            field_type: text
+            visible: true
+            editable: false
+          - id: customer_id
+            name: Customer
+            field_type: number
+            visible: true
+            required: true
+            relationship_id: customer_orders
+          - id: status
+            name: Status
+            field_type: select
+            visible: true
+            required: true
+            config:
+              options:
+                - value: pending
+                  label: Pending
+                - value: processing
+                  label: Processing
+                - value: shipped
+                  label: Shipped
+                - value: delivered
+                  label: Delivered
+                - value: cancelled
+                  label: Cancelled
+                - value: refunded
+                  label: Refunded
+          - id: payment_status
+            name: Payment Status
+            field_type: select
+            visible: true
+            required: true
+            config:
+              options:
+                - value: pending
+                  label: Pending
+                - value: paid
+                  label: Paid
+                - value: failed
+                  label: Failed
+                - value: refunded
+                  label: Refunded
+          - id: subtotal
+            name: Subtotal
+            field_type: currency
+            visible: true
+            required: true
+            config:
+              currency_code: USD
+              symbol: "$"
+              decimal_places: 2
+          - id: tax
+            name: Tax
+            field_type: currency
+            visible: true
+            required: true
+            config:
+              currency_code: USD
+              symbol: "$"
+              decimal_places: 2
+          - id: shipping
+            name: Shipping
+            field_type: currency
+            visible: true
+            required: true
+            config:
+              currency_code: USD
+              symbol: "$"
+              decimal_places: 2
+          - id: total
+            name: Total
+            field_type: currency
+            visible: true
+            required: true
+            config:
+              currency_code: USD
+              symbol: "$"
+              decimal_places: 2
+          - id: notes
+            name: Notes
+            field_type: textarea
+            visible: true
+            config:
+              rows: 3
+              max_length: 1000
+          - id: created_at
+            name: Order Date
+            field_type: datetime
+            visible: true
+            editable: false
+          - id: created_by
+            name: Created By
+            field_type: text
+            visible: false
+            editable: false
+          - id: updated_at
+            name: Last Updated
+            field_type: datetime
+            visible: true
+            editable: false
+          - id: updated_by
+            name: Updated By
+            field_type: text
+            visible: false
+            editable: false
+
+  # Products with Audit
+  - id: products
+    name: Products
+    icon: fa-box
+    audit:
+      track_changes: true
+      track_created: true
+      track_updated: true
+      track_deleted: false  # Keep product history forever
+      enable_rollback: true
+      retention_days: 3650  # 10 years
+      created_by_field: created_by
+      updated_by_field: updated_by
+      created_at_field: created_at
+      updated_at_field: updated_at
+    actions:
+      - id: list_products
+        name: List Products
+        type: list
+        data_source: main_db
+        query: "SELECT * FROM products ORDER BY name ASC"
+        required_scopes: []
+        fields:
+          - id: id
+            name: Product ID
+            field_type: number
+            visible: true
+            editable: false
+          - id: sku
+            name: SKU
+            field_type: text
+            visible: true
+            required: true
+            validations:
+              - type: unique_in
+                field_list: ["sku"]
+                message: SKU must be unique
+          - id: name
+            name: Product Name
+            field_type: text
+            visible: true
+            required: true
+            validations:
+              - type: min_length
+                value: 3
+              - type: max_length
+                value: 200
+          - id: description
+            name: Description
+            field_type: markdown
+            visible: true
+            config:
+              enable_preview: true
+          - id: category_id
+            name: Category
+            field_type: number
+            visible: true
+            required: true
+            relationship_id: product_category
+          - id: price
+            name: Price
+            field_type: currency
+            visible: true
+            required: true
+            config:
+              currency_code: USD
+              symbol: "$"
+              min: 0
+              decimal_places: 2
+          - id: cost
+            name: Cost
+            field_type: currency
+            visible: true
+            config:
+              currency_code: USD
+              symbol: "$"
+              min: 0
+              decimal_places: 2
+          - id: stock_quantity
+            name: Stock
+            field_type: number
+            visible: true
+            required: true
+            config:
+              min: 0
+              allow_decimals: false
+          - id: weight
+            name: Weight (kg)
+            field_type: number
+            visible: true
+            config:
+              min: 0
+              step: 0.01
+              allow_decimals: true
+          - id: status
+            name: Status
+            field_type: select
+            visible: true
+            required: true
+            config:
+              options:
+                - value: active
+                  label: Active
+                - value: inactive
+                  label: Inactive
+                - value: discontinued
+                  label: Discontinued
+          - id: images
+            name: Product Images
+            field_type: image
+            visible: true
+            config:
+              max_size_mb: 5.0
+              accepted_formats: ["jpg", "jpeg", "png", "webp"]
+              multiple: true
+          - id: created_at
+            name: Created
+            field_type: datetime
+            visible: true
+            editable: false
+          - id: updated_at
+            name: Updated
+            field_type: datetime
+            visible: true
+            editable: false
+
+  # Order Items (no separate audit, tracked through orders)
+  - id: order_items
+    name: Order Items
+    icon: fa-list
+    actions:
+      - id: list_order_items
+        name: List Order Items
+        type: list
+        data_source: main_db
+        query: "SELECT * FROM order_items ORDER BY created_at DESC"
+        required_scopes: []
+        fields:
+          - id: id
+            name: ID
+            field_type: number
+            visible: true
+            editable: false
+          - id: order_id
+            name: Order
+            field_type: number
+            visible: true
+            required: true
+            relationship_id: order_items
+          - id: product_id
+            name: Product
+            field_type: number
+            visible: true
+            required: true
+            relationship_id: product_order_items
+          - id: quantity
+            name: Quantity
+            field_type: number
+            visible: true
+            required: true
+            config:
+              min: 1
+              allow_decimals: false
+          - id: price
+            name: Unit Price
+            field_type: currency
+            visible: true
+            required: true
+            config:
+              currency_code: USD
+              symbol: "$"
+              decimal_places: 2
+          - id: subtotal
+            name: Subtotal
+            field_type: currency
+            visible: true
+            editable: false
+            config:
+              currency_code: USD
+              symbol: "$"
+              decimal_places: 2
+
+  # Categories
+  - id: categories
+    name: Categories
+    icon: fa-folder-tree
+    audit:
+      track_changes: true
+      track_created: true
+      track_updated: true
+      enable_rollback: true
+      retention_days: 1825  # 5 years
+    actions:
+      - id: list_categories
+        name: List Categories
+        type: list
+        data_source: main_db
+        query: "SELECT * FROM categories ORDER BY name ASC"
+        required_scopes: []
+        fields:
+          - id: id
+            name: ID
+            field_type: number
+            visible: true
+            editable: false
+          - id: name
+            name: Name
+            field_type: text
+            visible: true
+            required: true
+          - id: slug
+            name: Slug
+            field_type: slug
+            visible: true
+            required: true
+            config:
+              source_field: name
+          - id: description
+            name: Description
+            field_type: textarea
+            visible: true
+
+  # Addresses
+  - id: addresses
+    name: Addresses
+    icon: fa-location-dot
+    audit:
+      track_changes: true
+      track_created: true
+      track_updated: true
+      enable_rollback: false
+      retention_days: 2555  # 7 years for compliance
+    actions:
+      - id: list_addresses
+        name: List Addresses
+        type: list
+        data_source: main_db
+        query: "SELECT * FROM addresses ORDER BY created_at DESC"
+        required_scopes: []
+        fields:
+          - id: id
+            name: ID
+            field_type: number
+            visible: true
+            editable: false
+          - id: customer_id
+            name: Customer
+            field_type: number
+            visible: true
+            required: true
+            relationship_id: customer_addresses
+          - id: type
+            name: Type
+            field_type: select
+            visible: true
+            required: true
+            config:
+              options:
+                - value: billing
+                  label: Billing
+                - value: shipping
+                  label: Shipping
+          - id: street
+            name: Street Address
+            field_type: text
+            visible: true
+            required: true
+          - id: city
+            name: City
+            field_type: text
+            visible: true
+            required: true
+          - id: state
+            name: State/Province
+            field_type: text
+            visible: true
+            required: true
+          - id: postal_code
+            name: Postal Code
+            field_type: text
+            visible: true
+            required: true
+            validations:
+              - type: postal_code
+                country_code: US
+          - id: country
+            name: Country
+            field_type: text
+            visible: true
+            required: true
+          - id: is_default
+            name: Default Address
+            field_type: boolean
+            visible: true
+            config:
+              true_label: "Yes"
+              false_label: "No"

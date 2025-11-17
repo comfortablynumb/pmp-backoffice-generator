@@ -85,6 +85,12 @@ function initKeyboardShortcuts() {
             }
         }
 
+        // Ctrl/Cmd + L: Open activity log
+        if (isMod && e.key === 'l') {
+            e.preventDefault();
+            showActivityLog();
+        }
+
         // Ctrl/Cmd + /: Show keyboard shortcuts help
         if (isMod && e.key === '/') {
             e.preventDefault();
@@ -100,6 +106,7 @@ function showKeyboardShortcutsHelp() {
         { keys: 'Ctrl+E / ⌘E', desc: 'Export table to CSV' },
         { keys: 'Ctrl+D / ⌘D', desc: 'Toggle dark mode' },
         { keys: 'Ctrl+N / ⌘N', desc: 'Open create form' },
+        { keys: 'Ctrl+L / ⌘L', desc: 'Open activity log' },
         { keys: 'Esc', desc: 'Close modal' },
         { keys: 'Ctrl+/ / ⌘/', desc: 'Show this help' }
     ];
@@ -141,6 +148,11 @@ $(document).ready(function() {
     initDarkMode();
     initKeyboardShortcuts();
     loadBackoffices();
+
+    // Activity log button handler
+    $('#activity-log-btn').on('click', function() {
+        showActivityLog();
+    });
 });
 
 // Load all backoffices
