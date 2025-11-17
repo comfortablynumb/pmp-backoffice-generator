@@ -39,6 +39,8 @@ pub async fn start_server(config: AppConfig, backoffices: Vec<BackofficeConfig>)
             "/api/backoffices/:backoffice_id/sections/:section_id/actions/:action_id",
             get(execute_action_handler).post(execute_mutation_handler),
         )
+        .route("/api/docs", get(api_docs_handler))
+        .route("/openapi.yaml", get(openapi_spec_handler))
         .nest_service("/static", ServeDir::new("static"))
         .with_state(state);
 
@@ -55,6 +57,54 @@ pub async fn start_server(config: AppConfig, backoffices: Vec<BackofficeConfig>)
 /// Serve the main HTML page
 async fn index_handler() -> impl IntoResponse {
     Html(include_str!("../static/index.html"))
+}
+
+/// Serve OpenAPI specification
+async fn openapi_spec_handler() -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        [("content-type", "application/x-yaml")],
+        include_str!("../openapi.yaml"),
+    )
+}
+
+/// Serve Swagger UI for API documentation
+async fn api_docs_handler() -> impl IntoResponse {
+    Html(
+        r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Documentation - PMP Backoffice Generator</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.onload = function() {
+            window.ui = SwaggerUIBundle({
+                url: '/openapi.yaml',
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout"
+            });
+        };
+    </script>
+</body>
+</html>
+    "#,
+    )
 }
 
 /// Get application configuration
@@ -342,5 +392,117 @@ async fn execute_mutation_handler(
             Json(serde_json::json!({"error": e.to_string()})),
         )
             .into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{
+        ActionConfig, ActionType, BackofficeConfig, DataSourceConfig, FieldConfig, SectionConfig,
+        ServerConfig,
+    };
+
+    fn create_test_state() -> Arc<AppState> {
+        let config = AppConfig {
+            server: ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: 3000,
+            },
+            security: Some(crate::config::SecurityConfig {
+                enabled: false,
+                jwt_secret: None,
+            }),
+        };
+
+        let backoffice = BackofficeConfig {
+            id: "test".to_string(),
+            name: "Test Backoffice".to_string(),
+            description: Some("Test description".to_string()),
+            data_sources: HashMap::from([(
+                "test_api".to_string(),
+                DataSourceConfig::Api {
+                    base_url: "https://api.example.com".to_string(),
+                    headers: Some(HashMap::new()),
+                    auth: None,
+                },
+            )]),
+            sections: vec![SectionConfig {
+                id: "test_section".to_string(),
+                name: "Test Section".to_string(),
+                icon: Some("fa-test".to_string()),
+                actions: vec![ActionConfig {
+                    id: "test_action".to_string(),
+                    name: "Test Action".to_string(),
+                    action_type: ActionType::List {
+                        fields: vec![FieldConfig {
+                            id: "id".to_string(),
+                            name: "ID".to_string(),
+                            field_type: crate::config::FieldType::Text {
+                                config: Default::default(),
+                            },
+                            required: false,
+                            editable: false,
+                            visible: true,
+                            default_value: None,
+                            placeholder: None,
+                            help_text: None,
+                            validations: vec![],
+                        }],
+                        config: Default::default(),
+                    },
+                    data_source: "test_api".to_string(),
+                    required_scopes: vec![],
+                    query: Some("SELECT * FROM users".to_string()),
+                    endpoint: None,
+                }],
+            }],
+        };
+
+        Arc::new(AppState {
+            config,
+            backoffices: vec![backoffice],
+        })
+    }
+
+    #[tokio::test]
+    async fn test_config_handler() {
+        let state = create_test_state();
+        let response = config_handler(State(state.clone())).await;
+        let json = response.into_response();
+        assert_eq!(json.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_backoffices_handler() {
+        let state = create_test_state();
+        let response = backoffices_handler(State(state.clone())).await;
+        let json = response.into_response();
+        assert_eq!(json.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_backoffice_handler_found() {
+        let state = create_test_state();
+        let response = backoffice_handler(State(state.clone()), Path("test".to_string())).await;
+        let json = response.into_response();
+        assert_eq!(json.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_backoffice_handler_not_found() {
+        let state = create_test_state();
+        let response =
+            backoffice_handler(State(state.clone()), Path("nonexistent".to_string())).await;
+        let json = response.into_response();
+        assert_eq!(json.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn test_app_state_clone() {
+        let state = create_test_state();
+        let cloned = state.clone();
+        assert_eq!(state.backoffices.len(), cloned.backoffices.len());
+        assert_eq!(state.config.server.port, cloned.config.server.port);
     }
 }

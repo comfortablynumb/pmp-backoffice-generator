@@ -42,6 +42,150 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            pointer-events: none;
+        }
+
+        .toast {
+            pointer-events: auto;
+            min-width: 300px;
+            max-width: 500px;
+            margin-bottom: 10px;
+            padding: 16px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: all 0.3s ease-in-out;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .toast.hide {
+            opacity: 0;
+            transform: translateX(100%);
+        }
+
+        .toast-success {
+            background-color: #10b981;
+            color: white;
+        }
+
+        .toast-error {
+            background-color: #ef4444;
+            color: white;
+        }
+
+        .toast-warning {
+            background-color: #f59e0b;
+            color: white;
+        }
+
+        .toast-info {
+            background-color: #3b82f6;
+            color: white;
+        }
+
+        .toast-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .toast-message {
+            flex: 1;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .toast-close {
+            cursor: pointer;
+            font-size: 20px;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+            flex-shrink: 0;
+        }
+
+        .toast-close:hover {
+            opacity: 1;
+        }
+
+        /* Dark Mode */
+        body.dark-mode {
+            background-color: #1a202c;
+            color: #e2e8f0;
+        }
+
+        body.dark-mode .bg-gray-100 {
+            background-color: #1a202c !important;
+        }
+
+        body.dark-mode .bg-white {
+            background-color: #2d3748 !important;
+        }
+
+        body.dark-mode .bg-gray-50 {
+            background-color: #374151 !important;
+        }
+
+        body.dark-mode .text-gray-800,
+        body.dark-mode .text-gray-900 {
+            color: #e2e8f0 !important;
+        }
+
+        body.dark-mode .text-gray-700 {
+            color: #cbd5e0 !important;
+        }
+
+        body.dark-mode .text-gray-600 {
+            color: #a0aec0 !important;
+        }
+
+        body.dark-mode .text-gray-500 {
+            color: #718096 !important;
+        }
+
+        body.dark-mode .border-gray-200,
+        body.dark-mode .border-gray-300 {
+            border-color: #4a5568 !important;
+        }
+
+        body.dark-mode .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+            border-color: #4a5568 !important;
+        }
+
+        body.dark-mode input,
+        body.dark-mode textarea,
+        body.dark-mode select {
+            background-color: #2d3748 !important;
+            color: #e2e8f0 !important;
+            border-color: #4a5568 !important;
+        }
+
+        body.dark-mode .modal {
+            background-color: rgba(0,0,0,0.7);
+        }
+
+        .theme-toggle {
+            cursor: pointer;
+            font-size: 20px;
+            transition: transform 0.3s;
+        }
+
+        .theme-toggle:hover {
+            transform: scale(1.1);
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -56,6 +200,9 @@
                     <!-- Backoffice tabs will be inserted here -->
                 </div>
                 <div class="flex items-center space-x-4">
+                    <button id="theme-toggle" class="theme-toggle" title="Toggle dark mode">
+                        <i class="fas fa-moon"></i>
+                    </button>
                     <span id="user-info" class="text-sm">Admin</span>
                 </div>
             </div>
@@ -112,6 +259,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
 
     <script src="/static/app.js"></script>
 </body>
