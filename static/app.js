@@ -321,8 +321,11 @@ function renderTable(data, fields, config, pagination) {
     const $dataArea = $('#data-area');
     $dataArea.empty();
 
-    // Add search bar and export button
-    const $searchContainer = $('<div>').addClass('mb-4 flex items-center gap-3');
+    // Toolbar with search and actions
+    const $toolbar = $('<div>').addClass('mb-4 flex flex-col gap-3');
+
+    // Search and export row
+    const $searchRow = $('<div>').addClass('flex items-center gap-3');
     const $searchInput = $('<input>')
         .attr('type', 'text')
         .attr('id', 'table-search')
@@ -332,16 +335,92 @@ function renderTable(data, fields, config, pagination) {
     const $searchIcon = $('<div>').addClass('flex items-center gap-2 text-gray-500');
     $searchIcon.html('<i class="fas fa-search"></i>');
 
-    // Add CSV export button
+    // Filter toggle button
+    const $filterToggle = $('<button>')
+        .addClass('px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2')
+        .html('<i class="fas fa-filter"></i> Filters')
+        .click(function() {
+            $('#filter-panel').toggleClass('hidden');
+        });
+
+    // Export button
     const $exportBtn = $('<button>')
         .addClass('px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2')
-        .html('<i class="fas fa-download"></i> Export CSV')
+        .html('<i class="fas fa-download"></i> Export')
         .click(function() {
             exportTableToCSV(data, fields);
         });
 
-    $searchContainer.append($searchIcon).append($searchInput).append($exportBtn);
-    $dataArea.append($searchContainer);
+    // Import button
+    const $importBtn = $('<button>')
+        .addClass('px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2')
+        .html('<i class="fas fa-upload"></i> Import')
+        .click(function() {
+            showImportDialog();
+        });
+
+    $searchRow.append($searchIcon).append($searchInput).append($filterToggle).append($exportBtn).append($importBtn);
+
+    // Bulk actions row (initially hidden)
+    const $bulkRow = $('<div>')
+        .attr('id', 'bulk-actions-bar')
+        .addClass('hidden items-center gap-3 bg-indigo-50 p-3 rounded-lg border border-indigo-200');
+
+    const $selectedCount = $('<span>')
+        .attr('id', 'selected-count')
+        .addClass('text-sm font-medium text-indigo-900');
+
+    const $bulkDelete = $('<button>')
+        .addClass('px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm')
+        .html('<i class="fas fa-trash"></i> Delete Selected')
+        .click(function() {
+            bulkDeleteRows();
+        });
+
+    const $bulkExport = $('<button>')
+        .addClass('px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm')
+        .html('<i class="fas fa-download"></i> Export Selected')
+        .click(function() {
+            bulkExportRows();
+        });
+
+    const $deselectAll = $('<button>')
+        .addClass('px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm')
+        .html('Deselect All')
+        .click(function() {
+            deselectAllRows();
+        });
+
+    $bulkRow.append($selectedCount).append($bulkDelete).append($bulkExport).append($deselectAll);
+
+    $toolbar.append($searchRow).append($bulkRow);
+    $dataArea.append($toolbar);
+
+    // Advanced filter panel
+    const $filterPanel = $('<div>')
+        .attr('id', 'filter-panel')
+        .addClass('hidden mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200');
+
+    const $filterTitle = $('<div>').addClass('flex items-center justify-between mb-3');
+    $filterTitle.append($('<h3>').addClass('text-sm font-semibold text-gray-700').text('Advanced Filters'));
+
+    const $filterPresets = $('<div>').addClass('flex gap-2');
+    const $savePreset = $('<button>')
+        .addClass('text-xs px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700')
+        .html('<i class="fas fa-save"></i> Save Preset')
+        .click(function() { saveFilterPreset(); });
+
+    const $loadPreset = $('<select>')
+        .addClass('text-xs px-2 py-1 border border-gray-300 rounded')
+        .html('<option value="">Load Preset...</option>')
+        .change(function() { loadFilterPreset($(this).val()); });
+
+    $filterPresets.append($savePreset).append($loadPreset);
+    $filterTitle.append($filterPresets);
+
+    const $filterGrid = $('<div>').attr('id', 'filter-grid').addClass('grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3');
+    $filterPanel.append($filterTitle).append($filterGrid);
+    $dataArea.append($filterPanel);
 
     // Render filters if configured
     if (config && config.filters && config.filters.length > 0) {
@@ -355,18 +434,43 @@ function renderTable(data, fields, config, pagination) {
 
     const visibleFields = fields.filter(f => f.visible);
 
-    const $table = $('<table>').addClass('min-w-full divide-y divide-gray-200');
+    const $table = $('<table>').addClass('min-w-full divide-y divide-gray-200').attr('id', 'data-table');
 
-    // Table header
+    // Table header with checkboxes and sorting
     const $thead = $('<thead>').addClass('bg-gray-50');
     const $headerRow = $('<tr>');
 
+    // Checkbox column header
+    const $checkboxTh = $('<th>').addClass('px-6 py-3 text-left');
+    const $selectAll = $('<input>')
+        .attr('type', 'checkbox')
+        .attr('id', 'select-all-checkbox')
+        .addClass('rounded border-gray-300 text-indigo-600 focus:ring-indigo-500')
+        .change(function() {
+            toggleSelectAll($(this).is(':checked'));
+        });
+    $checkboxTh.append($selectAll);
+    $headerRow.append($checkboxTh);
+
     visibleFields.forEach(function(field) {
-        $headerRow.append(
-            $('<th>')
-                .addClass('px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider')
-                .text(field.name)
-        );
+        const $th = $('<th>')
+            .addClass('px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100')
+            .attr('data-field-id', field.id);
+
+        const $thContent = $('<div>').addClass('flex items-center justify-between gap-2');
+        $thContent.append($('<span>').text(field.name));
+
+        const $sortIcon = $('<i>')
+            .addClass('fas fa-sort text-gray-400')
+            .attr('data-sort-direction', 'none');
+        $thContent.append($sortIcon);
+
+        $th.append($thContent);
+        $th.click(function() {
+            sortByColumn(field.id, $sortIcon);
+        });
+
+        $headerRow.append($th);
     });
 
     $headerRow.append($('<th>').addClass('px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider').text('Actions'));
@@ -376,8 +480,24 @@ function renderTable(data, fields, config, pagination) {
     // Table body
     const $tbody = $('<tbody>').addClass('bg-white divide-y divide-gray-200');
 
-    data.forEach(function(row) {
-        const $tr = $('<tr>').addClass('hover:bg-gray-50');
+    data.forEach(function(row, index) {
+        const $tr = $('<tr>')
+            .addClass('hover:bg-gray-50')
+            .attr('data-row-index', index)
+            .attr('data-row-id', row.id || index);
+
+        // Checkbox column
+        const $checkboxTd = $('<td>').addClass('px-6 py-4');
+        const $checkbox = $('<input>')
+            .attr('type', 'checkbox')
+            .addClass('row-checkbox rounded border-gray-300 text-indigo-600 focus:ring-indigo-500')
+            .data('row-data', row)
+            .data('row-index', index)
+            .change(function() {
+                updateBulkActionsBar();
+            });
+        $checkboxTd.append($checkbox);
+        $tr.append($checkboxTd);
 
         visibleFields.forEach(function(field) {
             const value = row[field.id] || '';
@@ -385,7 +505,7 @@ function renderTable(data, fields, config, pagination) {
                 .addClass('px-6 py-4 whitespace-nowrap text-sm text-gray-900')
                 .text(formatFieldValue(value, field))
                 .attr('data-field-id', field.id)
-                .attr('data-row-id', row.id || '');
+                .attr('data-row-id', row.id || index);
 
             // Add inline editing for editable fields
             if (field.editable) {
@@ -2273,4 +2393,383 @@ function makeInlineEditable($cell, field, row) {
         // Small delay to allow Enter key to process first
         setTimeout(saveValue, 100);
     });
+}
+
+// ===== BULK OPERATIONS =====
+
+// Toggle select all checkboxes
+function toggleSelectAll(checked) {
+    $('.row-checkbox').prop('checked', checked);
+    updateBulkActionsBar();
+}
+
+// Update bulk actions bar visibility and count
+function updateBulkActionsBar() {
+    const selectedCount = $('.row-checkbox:checked').length;
+    const $bulkBar = $('#bulk-actions-bar');
+    const $selectAllCheckbox = $('#select-all-checkbox');
+
+    if (selectedCount > 0) {
+        $bulkBar.removeClass('hidden').addClass('flex');
+        $('#selected-count').text(`${selectedCount} row(s) selected`);
+    } else {
+        $bulkBar.removeClass('flex').addClass('hidden');
+    }
+
+    // Update select-all checkbox state
+    const totalCheckboxes = $('.row-checkbox').length;
+    $selectAllCheckbox.prop('checked', selectedCount === totalCheckboxes && totalCheckboxes > 0);
+}
+
+// Deselect all rows
+function deselectAllRows() {
+    $('.row-checkbox').prop('checked', false);
+    $('#select-all-checkbox').prop('checked', false);
+    updateBulkActionsBar();
+}
+
+// Get selected rows data
+function getSelectedRows() {
+    const selectedRows = [];
+    $('.row-checkbox:checked').each(function() {
+        selectedRows.push($(this).data('row-data'));
+    });
+    return selectedRows;
+}
+
+// Bulk delete rows
+function bulkDeleteRows() {
+    const selectedRows = getSelectedRows();
+    if (selectedRows.length === 0) {
+        showWarning('No rows selected');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to delete ${selectedRows.length} row(s)?`)) {
+        return;
+    }
+
+    const deleteAction = currentSection.actions.find(a => a.type === 'delete' || a.action_type === 'delete');
+
+    if (!deleteAction) {
+        showError('No delete action configured for this section');
+        return;
+    }
+
+    let completed = 0;
+    let failed = 0;
+
+    showProgress('Deleting rows...', 0, selectedRows.length);
+
+    selectedRows.forEach((row, index) => {
+        const url = `/api/backoffices/${currentBackoffice.id}/sections/${currentSection.id}/actions/${deleteAction.id}`;
+
+        $.ajax({
+            url: url,
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ id: row.id }),
+            success: function() {
+                completed++;
+                updateProgress(completed + failed, selectedRows.length);
+
+                if (completed + failed === selectedRows.length) {
+                    finishBulkOperation(completed, failed);
+                }
+            },
+            error: function() {
+                failed++;
+                updateProgress(completed + failed, selectedRows.length);
+
+                if (completed + failed === selectedRows.length) {
+                    finishBulkOperation(completed, failed);
+                }
+            }
+        });
+    });
+}
+
+// Bulk export selected rows
+function bulkExportRows() {
+    const selectedRows = getSelectedRows();
+    if (selectedRows.length === 0) {
+        showWarning('No rows selected');
+        return;
+    }
+
+    const visibleFields = currentAction.action_type.fields.filter(f => f.visible);
+    exportTableToCSV(selectedRows, visibleFields);
+    showSuccess(`Exported ${selectedRows.length} selected row(s)`);
+}
+
+// ===== COLUMN SORTING =====
+
+let currentSortField = null;
+let currentSortDirection = 'none';
+
+function sortByColumn(fieldId, $sortIcon) {
+    const $tbody = $('#data-table tbody');
+    const rows = $tbody.find('tr').toArray();
+
+    // Update sort direction
+    const currentDirection = $sortIcon.attr('data-sort-direction');
+    let newDirection;
+
+    if (currentDirection === 'none' || currentDirection === 'desc') {
+        newDirection = 'asc';
+        $sortIcon.removeClass('fa-sort fa-sort-down').addClass('fa-sort-up');
+    } else {
+        newDirection = 'desc';
+        $sortIcon.removeClass('fa-sort fa-sort-up').addClass('fa-sort-down');
+    }
+
+    // Reset other column icons
+    $('th[data-field-id] i').not($sortIcon).removeClass('fa-sort-up fa-sort-down').addClass('fa-sort').attr('data-sort-direction', 'none');
+
+    $sortIcon.attr('data-sort-direction', newDirection);
+    currentSortField = fieldId;
+    currentSortDirection = newDirection;
+
+    // Sort rows
+    rows.sort(function(a, b) {
+        const aValue = $(a).find(`td[data-field-id="${fieldId}"]`).text().trim();
+        const bValue = $(b).find(`td[data-field-id="${fieldId}"]`).text().trim();
+
+        // Try to parse as numbers
+        const aNum = parseFloat(aValue);
+        const bNum = parseFloat(bValue);
+
+        let comparison;
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+            comparison = aNum - bNum;
+        } else {
+            comparison = aValue.localeCompare(bValue);
+        }
+
+        return newDirection === 'asc' ? comparison : -comparison;
+    });
+
+    // Reorder DOM
+    $tbody.empty().append(rows);
+    showInfo(`Sorted by ${fieldId} (${newDirection})`);
+}
+
+// ===== FILTER PRESETS =====
+
+function saveFilterPreset() {
+    const presetName = prompt('Enter a name for this filter preset:');
+    if (!presetName) return;
+
+    const currentFilters = {};
+    $('#filter-grid input, #filter-grid select').each(function() {
+        const $input = $(this);
+        const fieldId = $input.attr('data-field-id');
+        if (fieldId) {
+            currentFilters[fieldId] = {
+                value: $input.val(),
+                operator: $input.attr('data-operator') || 'equals'
+            };
+        }
+    });
+
+    const presets = JSON.parse(localStorage.getItem('filterPresets') || '{}');
+    presets[presetName] = currentFilters;
+    localStorage.setItem('filterPresets', JSON.stringify(presets));
+
+    // Update dropdown
+    const $select = $('#filter-panel select');
+    $select.append($('<option>').val(presetName).text(presetName));
+
+    showSuccess(`Filter preset "${presetName}" saved`);
+}
+
+function loadFilterPreset(presetName) {
+    if (!presetName) return;
+
+    const presets = JSON.parse(localStorage.getItem('filterPresets') || '{}');
+    const preset = presets[presetName];
+
+    if (!preset) {
+        showError('Preset not found');
+        return;
+    }
+
+    // Apply preset filters
+    Object.keys(preset).forEach(fieldId => {
+        const filter = preset[fieldId];
+        const $input = $(`#filter-grid input[data-field-id="${fieldId}"], #filter-grid select[data-field-id="${fieldId}"]`);
+        if ($input.length) {
+            $input.val(filter.value);
+            $input.attr('data-operator', filter.operator);
+        }
+    });
+
+    showSuccess(`Loaded filter preset "${presetName}"`);
+}
+
+// Load saved presets on startup
+function initializeFilterPresets() {
+    const presets = JSON.parse(localStorage.getItem('filterPresets') || '{}');
+    const $select = $('#filter-panel select');
+
+    Object.keys(presets).forEach(presetName => {
+        $select.append($('<option>').val(presetName).text(presetName));
+    });
+}
+
+// ===== CSV IMPORT =====
+
+function showImportDialog() {
+    const dialogHtml = `
+        <div class="p-4">
+            <h3 class="text-lg font-bold mb-4">Import CSV</h3>
+            <p class="text-sm text-gray-600 mb-4">Select a CSV file to import. The first row should contain column headers.</p>
+
+            <input type="file" id="csv-file-input" accept=".csv" class="mb-4 block w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded file:border-0
+                file:text-sm file:font-semibold
+                file:bg-indigo-50 file:text-indigo-700
+                hover:file:bg-indigo-100" />
+
+            <div class="flex justify-end gap-2 mt-6">
+                <button onclick="closeModal()" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button onclick="processCSVImport()" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Import</button>
+            </div>
+        </div>
+    `;
+
+    $('#modal-title').text('Import CSV');
+    $('#form-fields').html(dialogHtml);
+    $('#submit-text').parent().hide();
+    $('#formModal').addClass('active');
+}
+
+function processCSVImport() {
+    const fileInput = document.getElementById('csv-file-input');
+    if (!fileInput.files.length) {
+        showError('Please select a file');
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+        const csvContent = e.target.result;
+        const rows = csvContent.split('\n').map(row => row.split(','));
+
+        if (rows.length < 2) {
+            showError('CSV file must have at least a header row and one data row');
+            return;
+        }
+
+        const headers = rows[0].map(h => h.trim());
+        const dataRows = rows.slice(1).filter(row => row.length > 1);
+
+        closeModal();
+        showProgress('Importing rows...', 0, dataRows.length);
+
+        const createAction = currentSection.actions.find(a =>
+            a.type === 'form' && a.config && a.config.form_mode === 'create'
+        );
+
+        if (!createAction) {
+            showError('No create action configured for this section');
+            return;
+        }
+
+        let completed = 0;
+        let failed = 0;
+
+        dataRows.forEach((row, index) => {
+            const rowData = {};
+            headers.forEach((header, i) => {
+                if (row[i]) {
+                    rowData[header] = row[i].trim();
+                }
+            });
+
+            const url = `/api/backoffices/${currentBackoffice.id}/sections/${currentSection.id}/actions/${createAction.id}`;
+
+            $.ajax({
+                url: url,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(rowData),
+                success: function() {
+                    completed++;
+                    updateProgress(completed + failed, dataRows.length);
+
+                    if (completed + failed === dataRows.length) {
+                        finishBulkOperation(completed, failed, true);
+                    }
+                },
+                error: function() {
+                    failed++;
+                    updateProgress(completed + failed, dataRows.length);
+
+                    if (completed + failed === dataRows.length) {
+                        finishBulkOperation(completed, failed, true);
+                    }
+                }
+            });
+        });
+    };
+
+    reader.readAsText(file);
+}
+
+// ===== PROGRESS INDICATORS =====
+
+function showProgress(message, current, total) {
+    const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+
+    const progressHtml = `
+        <div id="progress-indicator" class="fixed bottom-4 right-4 bg-white p-4 rounded-lg shadow-xl border border-gray-200 min-w-80 z-50">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="loading"></div>
+                <span class="text-sm font-medium">${message}</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2.5">
+                <div class="bg-indigo-600 h-2.5 rounded-full transition-all" style="width: ${percentage}%"></div>
+            </div>
+            <div class="text-xs text-gray-500 mt-1">${current} / ${total} (${percentage}%)</div>
+        </div>
+    `;
+
+    $('#progress-indicator').remove();
+    $('body').append(progressHtml);
+}
+
+function updateProgress(current, total) {
+    const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+    $('#progress-indicator .bg-indigo-600').css('width', percentage + '%');
+    $('#progress-indicator .text-xs').text(`${current} / ${total} (${percentage}%)`);
+}
+
+function hideProgress() {
+    $('#progress-indicator').fadeOut(300, function() {
+        $(this).remove();
+    });
+}
+
+function finishBulkOperation(completed, failed, isImport = false) {
+    setTimeout(() => {
+        hideProgress();
+
+        if (failed === 0) {
+            showSuccess(`Successfully ${isImport ? 'imported' : 'processed'} ${completed} row(s)`);
+        } else {
+            showWarning(`Completed: ${completed}, Failed: ${failed}`);
+        }
+
+        // Reload data
+        if (currentAction) {
+            executeAction(currentAction);
+        }
+
+        // Deselect all
+        deselectAllRows();
+    }, 500);
 }
