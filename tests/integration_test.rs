@@ -39,11 +39,13 @@ fn test_create_backoffice_config() {
                 auth: None,
             },
         )]),
+        relationships: vec![],
         sections: vec![SectionConfig {
             id: "users".to_string(),
             name: "Users".to_string(),
             icon: Some("fa-users".to_string()),
             actions: vec![],
+            audit: None,
         }],
     };
 
@@ -72,6 +74,7 @@ fn test_create_action_config() {
                 placeholder: None,
                 help_text: None,
                 validations: vec![],
+                relationship_id: None,
             }],
             config: ListActionConfig::default(),
         },
@@ -101,6 +104,7 @@ fn test_field_config_with_validation() {
         placeholder: Some("Enter your email".to_string()),
         help_text: Some("We'll never share your email".to_string()),
         validations: vec![],
+        relationship_id: None,
     };
 
     assert_eq!(field.id, "email");
@@ -140,6 +144,7 @@ fn test_section_with_multiple_actions() {
                 endpoint: None,
             },
         ],
+        audit: None,
     };
 
     assert_eq!(section.actions.len(), 2);

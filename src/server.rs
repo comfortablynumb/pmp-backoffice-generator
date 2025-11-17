@@ -427,6 +427,7 @@ mod tests {
                     auth: None,
                 },
             )]),
+            relationships: vec![],
             sections: vec![SectionConfig {
                 id: "test_section".to_string(),
                 name: "Test Section".to_string(),
@@ -448,6 +449,7 @@ mod tests {
                             placeholder: None,
                             help_text: None,
                             validations: vec![],
+                            relationship_id: None,
                         }],
                         config: Default::default(),
                     },
@@ -456,6 +458,7 @@ mod tests {
                     query: Some("SELECT * FROM users".to_string()),
                     endpoint: None,
                 }],
+                audit: None,
             }],
         };
 
