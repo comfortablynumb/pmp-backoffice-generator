@@ -31,6 +31,8 @@ pub struct BackofficeConfig {
     pub description: Option<String>,
     pub data_sources: HashMap<String, DataSourceConfig>,
     pub sections: Vec<SectionConfig>,
+    #[serde(default)]
+    pub relationships: Vec<RelationshipConfig>,
 }
 
 /// Data source configuration
@@ -128,6 +130,38 @@ pub struct ApiAuthConfig {
     pub password: Option<String>,
 }
 
+/// Relationship configuration between tables/sections
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelationshipConfig {
+    pub id: String,
+    pub name: String,
+    pub relationship_type: RelationshipType,
+    pub from_section: String,
+    pub from_field: String,
+    pub to_section: String,
+    pub to_field: String,
+    #[serde(default)]
+    pub cascade_delete: bool,
+    #[serde(default)]
+    pub display_in_form: bool,
+    #[serde(default)]
+    pub display_in_list: bool,
+    pub display_fields: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RelationshipType {
+    OneToOne,
+    OneToMany,
+    ManyToOne,
+    ManyToMany {
+        junction_table: String,
+        from_junction_field: String,
+        to_junction_field: String,
+    },
+}
+
 /// Section configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SectionConfig {
@@ -135,6 +169,33 @@ pub struct SectionConfig {
     pub name: String,
     pub icon: Option<String>,
     pub actions: Vec<ActionConfig>,
+    #[serde(default)]
+    pub audit: Option<AuditConfig>,
+}
+
+/// Audit trail configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditConfig {
+    #[serde(default = "default_true")]
+    pub track_changes: bool,
+    #[serde(default = "default_true")]
+    pub track_created: bool,
+    #[serde(default = "default_true")]
+    pub track_updated: bool,
+    #[serde(default = "default_true")]
+    pub track_deleted: bool,
+    #[serde(default)]
+    pub enable_rollback: bool,
+    #[serde(default = "default_audit_retention_days")]
+    pub retention_days: u32,
+    pub created_by_field: Option<String>,
+    pub updated_by_field: Option<String>,
+    pub created_at_field: Option<String>,
+    pub updated_at_field: Option<String>,
+}
+
+fn default_audit_retention_days() -> u32 {
+    365 // Keep audit logs for 1 year by default
 }
 
 /// Action configuration
@@ -288,6 +349,7 @@ pub struct FieldConfig {
     pub help_text: Option<String>,
     #[serde(default)]
     pub validations: Vec<ValidationRule>,
+    pub relationship_id: Option<String>,
 }
 
 fn default_false() -> bool {
