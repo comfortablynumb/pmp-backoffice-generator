@@ -3,7 +3,7 @@ mod data_source;
 mod server;
 
 use anyhow::Result;
-use tracing::{info, error, warn};
+use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -11,8 +11,7 @@ async fn main() -> Result<()> {
     // Initialize tracing with environment filter support
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("info"))
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
         .with_target(true)
         .with_thread_ids(true)
@@ -45,7 +44,10 @@ async fn main() -> Result<()> {
     info!("Loading backoffice configurations from config/backoffices...");
     let backoffices = match config::load_backoffices("config/backoffices").await {
         Ok(configs) => {
-            info!(count = configs.len(), "Successfully loaded backoffice configurations");
+            info!(
+                count = configs.len(),
+                "Successfully loaded backoffice configurations"
+            );
 
             // Log details about each backoffice
             for (idx, backoffice) in configs.iter().enumerate() {

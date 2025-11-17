@@ -13,7 +13,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tower_http::services::ServeDir;
-use tracing::{debug, info, error};
+use tracing::{debug, error, info};
 
 /// Application state
 #[derive(Clone)]
@@ -26,10 +26,7 @@ pub struct AppState {
 pub async fn start_server(config: AppConfig, backoffices: Vec<BackofficeConfig>) -> Result<()> {
     let backoffice_count = backoffices.len();
 
-    debug!(
-        backoffices = backoffice_count,
-        "Creating application state"
-    );
+    debug!(backoffices = backoffice_count, "Creating application state");
 
     let state = Arc::new(AppState {
         config: config.clone(),

@@ -1565,10 +1565,7 @@ pub async fn load_backoffices<P: AsRef<Path>>(dir: P) -> Result<Vec<BackofficeCo
 
         let content = tokio::fs::read_to_string(file_path)
             .await
-            .context(format!(
-                "Failed to read backoffice config: {:?}",
-                file_path
-            ))?;
+            .context(format!("Failed to read backoffice config: {:?}", file_path))?;
 
         debug!(path = ?file_path, size = content.len(), "Config file read");
 
