@@ -13,7 +13,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tower_http::services::ServeDir;
-use tracing::info;
+use tracing::{debug, info, error};
 
 /// Application state
 #[derive(Clone)]
@@ -24,12 +24,20 @@ pub struct AppState {
 
 /// Start the web server
 pub async fn start_server(config: AppConfig, backoffices: Vec<BackofficeConfig>) -> Result<()> {
+    let backoffice_count = backoffices.len();
+
+    debug!(
+        backoffices = backoffice_count,
+        "Creating application state"
+    );
+
     let state = Arc::new(AppState {
         config: config.clone(),
         backoffices,
     });
 
     // Build the router
+    debug!("Setting up API routes");
     let app = Router::new()
         .route("/", get(index_handler))
         .route("/api/config", get(config_handler))
@@ -44,14 +52,51 @@ pub async fn start_server(config: AppConfig, backoffices: Vec<BackofficeConfig>)
         .nest_service("/static", ServeDir::new("static"))
         .with_state(state);
 
+    info!("Routes configured:");
+    info!("  GET  /                     - Main application page");
+    info!("  GET  /api/config           - Application configuration");
+    info!("  GET  /api/backoffices      - List all backoffices");
+    info!("  GET  /api/backoffices/:id  - Get backoffice by ID");
+    info!("  GET  /api/docs             - API documentation (Swagger UI)");
+    info!("  GET  /openapi.yaml         - OpenAPI specification");
+    info!("  *    /static/*             - Static files");
+
     let addr = format!("{}:{}", config.server.host, config.server.port);
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    debug!(address = %addr, "Binding TCP listener");
 
-    info!("Server listening on {}", addr);
+    let listener = match tokio::net::TcpListener::bind(&addr).await {
+        Ok(listener) => {
+            let local_addr = listener.local_addr()?;
+            info!("╔══════════════════════════════════════════════════════════╗");
+            info!("║              Server Ready and Listening                  ║");
+            info!("╚══════════════════════════════════════════════════════════╝");
+            info!("🚀 Server started successfully!");
+            info!("📍 Address: http://{}", local_addr);
+            info!("📊 API Docs: http://{}/api/docs", local_addr);
+            info!("📚 Backoffices loaded: {}", backoffice_count);
+            info!("");
+            info!("Press Ctrl+C to stop the server");
+            info!("");
+            listener
+        }
+        Err(e) => {
+            error!(address = %addr, error = %e, "Failed to bind to address");
+            return Err(e.into());
+        }
+    };
 
-    axum::serve(listener, app).await?;
+    info!("Server is now accepting connections...");
 
-    Ok(())
+    match axum::serve(listener, app).await {
+        Ok(_) => {
+            info!("Server stopped");
+            Ok(())
+        }
+        Err(e) => {
+            error!(error = %e, "Server error");
+            Err(e.into())
+        }
+    }
 }
 
 /// Serve the main HTML page

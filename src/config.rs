@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+use tracing::{debug, info, warn};
 use walkdir::WalkDir;
 
 /// Main application configuration
@@ -1519,12 +1520,23 @@ pub enum ConditionOperator {
 
 /// Load application configuration
 pub async fn load_app_config<P: AsRef<Path>>(path: P) -> Result<AppConfig> {
-    let content = tokio::fs::read_to_string(path.as_ref())
+    let path_ref = path.as_ref();
+    debug!(path = ?path_ref, "Reading application config file");
+
+    let content = tokio::fs::read_to_string(path_ref)
         .await
         .context("Failed to read app config file")?;
 
+    debug!(size = content.len(), "Config file read successfully");
+
     let config: AppConfig =
         serde_yaml::from_str(&content).context("Failed to parse app config YAML")?;
+
+    debug!(
+        host = %config.server.host,
+        port = config.server.port,
+        "Application config parsed successfully"
+    );
 
     Ok(config)
 }
@@ -1532,28 +1544,52 @@ pub async fn load_app_config<P: AsRef<Path>>(path: P) -> Result<AppConfig> {
 /// Load all backoffice configurations from a directory
 pub async fn load_backoffices<P: AsRef<Path>>(dir: P) -> Result<Vec<BackofficeConfig>> {
     let mut backoffices = Vec::new();
+    let dir_path = dir.as_ref();
 
-    for entry in WalkDir::new(dir.as_ref())
+    debug!(path = ?dir_path, "Scanning directory for backoffice configs");
+
+    let yaml_files: Vec<_> = WalkDir::new(dir_path)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| {
             e.path().extension().and_then(|s| s.to_str()) == Some("yaml")
                 || e.path().extension().and_then(|s| s.to_str()) == Some("yml")
         })
-    {
-        let content = tokio::fs::read_to_string(entry.path())
+        .collect();
+
+    info!(count = yaml_files.len(), "Found YAML config files");
+
+    for entry in yaml_files {
+        let file_path = entry.path();
+        debug!(path = ?file_path, "Reading backoffice config");
+
+        let content = tokio::fs::read_to_string(file_path)
             .await
             .context(format!(
                 "Failed to read backoffice config: {:?}",
-                entry.path()
+                file_path
             ))?;
+
+        debug!(path = ?file_path, size = content.len(), "Config file read");
 
         let config: BackofficeConfig = serde_yaml::from_str(&content).context(format!(
             "Failed to parse backoffice config: {:?}",
-            entry.path()
+            file_path
         ))?;
 
+        info!(
+            file = ?file_path,
+            id = %config.id,
+            name = %config.name,
+            sections = config.sections.len(),
+            "Parsed backoffice config"
+        );
+
         backoffices.push(config);
+    }
+
+    if backoffices.is_empty() {
+        warn!(directory = ?dir_path, "No backoffice configurations found in directory");
     }
 
     Ok(backoffices)
