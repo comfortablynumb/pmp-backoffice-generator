@@ -70,7 +70,8 @@ async fn openapi_spec_handler() -> impl IntoResponse {
 
 /// Serve Swagger UI for API documentation
 async fn api_docs_handler() -> impl IntoResponse {
-    Html(r#"
+    Html(
+        r#"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -102,7 +103,8 @@ async fn api_docs_handler() -> impl IntoResponse {
     </script>
 </body>
 </html>
-    "#)
+    "#,
+    )
 }
 
 /// Get application configuration

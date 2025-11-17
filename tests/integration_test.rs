@@ -2,7 +2,7 @@
 
 use pmp_backoffice_generator::config::{
     ActionConfig, ActionType, AppConfig, BackofficeConfig, DataSourceConfig, FieldConfig,
-    FieldType, ListActionConfig, SecurityConfig, SectionConfig, ServerConfig,
+    FieldType, ListActionConfig, SectionConfig, SecurityConfig, ServerConfig,
 };
 use std::collections::HashMap;
 
@@ -22,7 +22,7 @@ fn test_create_app_config() {
     assert_eq!(config.server.host, "0.0.0.0");
     assert_eq!(config.server.port, 3000);
     assert!(config.security.is_some());
-    assert_eq!(config.security.unwrap().enabled, false);
+    assert!(!config.security.unwrap().enabled);
 }
 
 #[test]
@@ -104,7 +104,7 @@ fn test_field_config_with_validation() {
     };
 
     assert_eq!(field.id, "email");
-    assert_eq!(field.required, true);
+    assert!(field.required);
     assert_eq!(field.placeholder.as_ref().unwrap(), "Enter your email");
 }
 
