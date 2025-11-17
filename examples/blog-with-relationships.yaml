@@ -1,0 +1,408 @@
+id: blog
+name: Blog Management System
+description: Complete blog platform with relationships and audit trails
+
+data_sources:
+  main_db:
+    type: database
+    connection_string: postgresql://user:pass@localhost/blog
+    db_type: postgres
+
+# Define relationships between tables
+relationships:
+  # One-to-Many: User has many Posts
+  - id: user_posts
+    name: User Posts
+    relationship_type: onetomany
+    from_section: users
+    from_field: id
+    to_section: posts
+    to_field: author_id
+    cascade_delete: false
+    display_in_form: true
+    display_in_list: true
+    display_fields: ["id", "title", "status", "created_at"]
+
+  # One-to-Many: User has many Comments
+  - id: user_comments
+    name: User Comments
+    relationship_type: onetomany
+    from_section: users
+    from_field: id
+    to_section: comments
+    to_field: user_id
+    cascade_delete: true
+    display_in_form: true
+    display_in_list: false
+    display_fields: ["id", "content", "created_at"]
+
+  # One-to-Many: Post has many Comments
+  - id: post_comments
+    name: Post Comments
+    relationship_type: onetomany
+    from_section: posts
+    from_field: id
+    to_section: comments
+    to_field: post_id
+    cascade_delete: true
+    display_in_form: true
+    display_in_list: true
+    display_fields: ["id", "user_id", "content", "created_at"]
+
+  # Many-to-One: Posts belong to Category
+  - id: post_category
+    name: Post Category
+    relationship_type: manytoone
+    from_section: posts
+    from_field: category_id
+    to_section: categories
+    to_field: id
+    cascade_delete: false
+    display_in_form: true
+    display_in_list: true
+    display_fields: ["id", "name", "slug"]
+
+  # Many-to-Many: Posts and Tags
+  - id: post_tags
+    name: Post Tags
+    relationship_type: manytomany
+    from_section: posts
+    from_field: id
+    to_section: tags
+    to_field: id
+    junction_table: post_tags
+    from_junction_field: post_id
+    to_junction_field: tag_id
+    cascade_delete: false
+    display_in_form: true
+    display_in_list: true
+    display_fields: ["id", "name"]
+
+sections:
+  # Users Section with Audit
+  - id: users
+    name: Users
+    icon: fa-users
+    audit:
+      track_changes: true
+      track_created: true
+      track_updated: true
+      track_deleted: true
+      enable_rollback: true
+      retention_days: 365
+      created_by_field: created_by
+      updated_by_field: updated_by
+      created_at_field: created_at
+      updated_at_field: updated_at
+    actions:
+      - id: list_users
+        name: List Users
+        type: list
+        data_source: main_db
+        query: "SELECT * FROM users ORDER BY created_at DESC"
+        required_scopes: []
+        fields:
+          - id: id
+            name: ID
+            field_type: number
+            visible: true
+            editable: false
+          - id: username
+            name: Username
+            field_type: text
+            visible: true
+            required: true
+          - id: email
+            name: Email
+            field_type: email
+            visible: true
+            required: true
+          - id: role
+            name: Role
+            field_type: select
+            visible: true
+            config:
+              options:
+                - value: admin
+                  label: Administrator
+                - value: editor
+                  label: Editor
+                - value: author
+                  label: Author
+          - id: created_at
+            name: Created At
+            field_type: datetime
+            visible: true
+            editable: false
+          - id: created_by
+            name: Created By
+            field_type: text
+            visible: false
+            editable: false
+          - id: updated_at
+            name: Updated At
+            field_type: datetime
+            visible: true
+            editable: false
+          - id: updated_by
+            name: Updated By
+            field_type: text
+            visible: false
+            editable: false
+
+  # Posts Section with Audit and Relationships
+  - id: posts
+    name: Posts
+    icon: fa-newspaper
+    audit:
+      track_changes: true
+      track_created: true
+      track_updated: true
+      track_deleted: true
+      enable_rollback: true
+      retention_days: 730  # Keep for 2 years
+      created_by_field: created_by
+      updated_by_field: updated_by
+      created_at_field: created_at
+      updated_at_field: updated_at
+    actions:
+      - id: list_posts
+        name: List Posts
+        type: list
+        data_source: main_db
+        query: "SELECT * FROM posts ORDER BY created_at DESC"
+        required_scopes: []
+        fields:
+          - id: id
+            name: ID
+            field_type: number
+            visible: true
+            editable: false
+          - id: title
+            name: Title
+            field_type: text
+            visible: true
+            required: true
+            validations:
+              - type: min_length
+                value: 5
+                message: Title must be at least 5 characters
+              - type: max_length
+                value: 200
+                message: Title cannot exceed 200 characters
+          - id: slug
+            name: Slug
+            field_type: slug
+            visible: true
+            required: true
+            config:
+              source_field: title
+              separator: "-"
+              lowercase: true
+              max_length: 250
+          - id: content
+            name: Content
+            field_type: markdown
+            visible: true
+            required: true
+            config:
+              enable_preview: true
+              enable_toolbar: true
+          - id: author_id
+            name: Author
+            field_type: number
+            visible: true
+            required: true
+            relationship_id: user_posts  # Links to relationship
+          - id: category_id
+            name: Category
+            field_type: number
+            visible: true
+            required: true
+            relationship_id: post_category  # Links to relationship
+          - id: status
+            name: Status
+            field_type: select
+            visible: true
+            required: true
+            config:
+              options:
+                - value: draft
+                  label: Draft
+                - value: published
+                  label: Published
+                - value: archived
+                  label: Archived
+          - id: featured_image
+            name: Featured Image
+            field_type: image
+            visible: true
+            config:
+              max_size_mb: 2.0
+              accepted_formats: ["jpg", "jpeg", "png", "webp"]
+              max_width: 1920
+              max_height: 1080
+          - id: created_at
+            name: Created At
+            field_type: datetime
+            visible: true
+            editable: false
+          - id: updated_at
+            name: Updated At
+            field_type: datetime
+            visible: true
+            editable: false
+
+  # Comments Section with Audit
+  - id: comments
+    name: Comments
+    icon: fa-comments
+    audit:
+      track_changes: true
+      track_created: true
+      track_updated: true
+      track_deleted: true
+      enable_rollback: false  # Don't allow rollback for comments
+      retention_days: 180
+      created_by_field: created_by
+      updated_by_field: updated_by
+      created_at_field: created_at
+      updated_at_field: updated_at
+    actions:
+      - id: list_comments
+        name: List Comments
+        type: list
+        data_source: main_db
+        query: "SELECT * FROM comments ORDER BY created_at DESC"
+        required_scopes: []
+        fields:
+          - id: id
+            name: ID
+            field_type: number
+            visible: true
+            editable: false
+          - id: post_id
+            name: Post
+            field_type: number
+            visible: true
+            required: true
+            relationship_id: post_comments
+          - id: user_id
+            name: User
+            field_type: number
+            visible: true
+            required: true
+            relationship_id: user_comments
+          - id: content
+            name: Content
+            field_type: textarea
+            visible: true
+            required: true
+            config:
+              min_length: 1
+              max_length: 1000
+              rows: 3
+          - id: status
+            name: Status
+            field_type: select
+            visible: true
+            required: true
+            config:
+              options:
+                - value: pending
+                  label: Pending
+                - value: approved
+                  label: Approved
+                - value: spam
+                  label: Spam
+          - id: created_at
+            name: Created At
+            field_type: datetime
+            visible: true
+            editable: false
+
+  # Categories Section
+  - id: categories
+    name: Categories
+    icon: fa-folder
+    audit:
+      track_changes: true
+      track_created: true
+      track_updated: true
+      enable_rollback: true
+      retention_days: 365
+    actions:
+      - id: list_categories
+        name: List Categories
+        type: list
+        data_source: main_db
+        query: "SELECT * FROM categories ORDER BY name ASC"
+        required_scopes: []
+        fields:
+          - id: id
+            name: ID
+            field_type: number
+            visible: true
+            editable: false
+          - id: name
+            name: Name
+            field_type: text
+            visible: true
+            required: true
+          - id: slug
+            name: Slug
+            field_type: slug
+            visible: true
+            required: true
+            config:
+              source_field: name
+              separator: "-"
+              lowercase: true
+          - id: description
+            name: Description
+            field_type: textarea
+            visible: true
+            config:
+              rows: 2
+              max_length: 500
+
+  # Tags Section
+  - id: tags
+    name: Tags
+    icon: fa-tags
+    audit:
+      track_changes: false  # Simple tags don't need full audit
+      track_created: true
+      track_updated: false
+    actions:
+      - id: list_tags
+        name: List Tags
+        type: list
+        data_source: main_db
+        query: "SELECT * FROM tags ORDER BY name ASC"
+        required_scopes: []
+        fields:
+          - id: id
+            name: ID
+            field_type: number
+            visible: true
+            editable: false
+          - id: name
+            name: Name
+            field_type: text
+            visible: true
+            required: true
+            validations:
+              - type: min_length
+                value: 2
+              - type: max_length
+                value: 50
+          - id: slug
+            name: Slug
+            field_type: slug
+            visible: true
+            required: true
+            config:
+              source_field: name
+              separator: "-"
+              lowercase: true

@@ -85,6 +85,12 @@ function initKeyboardShortcuts() {
             }
         }
 
+        // Ctrl/Cmd + L: Open activity log
+        if (isMod && e.key === 'l') {
+            e.preventDefault();
+            showActivityLog();
+        }
+
         // Ctrl/Cmd + /: Show keyboard shortcuts help
         if (isMod && e.key === '/') {
             e.preventDefault();
@@ -100,6 +106,7 @@ function showKeyboardShortcutsHelp() {
         { keys: 'Ctrl+E / ⌘E', desc: 'Export table to CSV' },
         { keys: 'Ctrl+D / ⌘D', desc: 'Toggle dark mode' },
         { keys: 'Ctrl+N / ⌘N', desc: 'Open create form' },
+        { keys: 'Ctrl+L / ⌘L', desc: 'Open activity log' },
         { keys: 'Esc', desc: 'Close modal' },
         { keys: 'Ctrl+/ / ⌘/', desc: 'Show this help' }
     ];
@@ -141,6 +148,11 @@ $(document).ready(function() {
     initDarkMode();
     initKeyboardShortcuts();
     loadBackoffices();
+
+    // Activity log button handler
+    $('#activity-log-btn').on('click', function() {
+        showActivityLog();
+    });
 });
 
 // Load all backoffices
@@ -343,13 +355,44 @@ function renderTable(data, fields, config, pagination) {
             $('#filter-panel').toggleClass('hidden');
         });
 
-    // Export button
+    // Export dropdown button
+    const $exportContainer = $('<div>').addClass('relative');
     const $exportBtn = $('<button>')
         .addClass('px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2')
-        .html('<i class="fas fa-download"></i> Export')
-        .click(function() {
-            exportTableToCSV(data, fields);
+        .html('<i class="fas fa-download"></i> Export <i class="fas fa-chevron-down ml-1"></i>')
+        .click(function(e) {
+            e.stopPropagation();
+            $('#export-dropdown').toggleClass('hidden');
         });
+
+    const $exportDropdown = $('<div>')
+        .attr('id', 'export-dropdown')
+        .addClass('hidden absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 z-50');
+
+    const exportOptions = [
+        { label: 'Export as CSV', icon: 'fa-file-csv', format: 'csv' },
+        { label: 'Export as Excel', icon: 'fa-file-excel', format: 'xlsx' },
+        { label: 'Export as JSON', icon: 'fa-file-code', format: 'json' },
+        { label: 'Export as PDF', icon: 'fa-file-pdf', format: 'pdf' }
+    ];
+
+    exportOptions.forEach(option => {
+        const $optionBtn = $('<button>')
+            .addClass('w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2 text-sm')
+            .html(`<i class="fas ${option.icon}"></i> ${option.label}`)
+            .click(function() {
+                $('#export-dropdown').addClass('hidden');
+                exportTable(data, fields, option.format);
+            });
+        $exportDropdown.append($optionBtn);
+    });
+
+    $exportContainer.append($exportBtn).append($exportDropdown);
+
+    // Close dropdown when clicking outside
+    $(document).on('click', function() {
+        $('#export-dropdown').addClass('hidden');
+    });
 
     // Import button
     const $importBtn = $('<button>')
@@ -359,7 +402,7 @@ function renderTable(data, fields, config, pagination) {
             showImportDialog();
         });
 
-    $searchRow.append($searchIcon).append($searchInput).append($filterToggle).append($exportBtn).append($importBtn);
+    $searchRow.append($searchIcon).append($searchInput).append($filterToggle).append($exportContainer).append($importBtn);
 
     // Bulk actions row (initially hidden)
     const $bulkRow = $('<div>')
@@ -2214,13 +2257,50 @@ function showInfo(message) {
     console.info(message);
 }
 
-// Export table data to CSV
-function exportTableToCSV(data, fields) {
+// ===== ADVANCED EXPORT OPTIONS =====
+
+// Main export function with format support
+function exportTable(data, fields, format = 'csv') {
     if (!data || data.length === 0) {
         showWarning('No data to export');
         return;
     }
 
+    // Get current filter state (only visible rows)
+    const visibleData = getVisibleTableData(data);
+
+    switch (format) {
+        case 'csv':
+            exportTableToCSV(visibleData, fields);
+            break;
+        case 'xlsx':
+            exportTableToExcel(visibleData, fields);
+            break;
+        case 'json':
+            exportTableToJSON(visibleData, fields);
+            break;
+        case 'pdf':
+            exportTableToPDF(visibleData, fields);
+            break;
+        default:
+            showError('Unsupported export format');
+    }
+}
+
+// Get visible table data (respects current search/filter)
+function getVisibleTableData(allData) {
+    const visibleRows = [];
+    $('#data-table tbody tr:visible').each(function() {
+        const rowIndex = $(this).data('row-index');
+        if (rowIndex !== undefined && allData[rowIndex]) {
+            visibleRows.push(allData[rowIndex]);
+        }
+    });
+    return visibleRows.length > 0 ? visibleRows : allData;
+}
+
+// Export table data to CSV
+function exportTableToCSV(data, fields) {
     const visibleFields = fields.filter(f => f.visible);
 
     // Create CSV header
@@ -2275,6 +2355,1035 @@ function exportTableToCSV(data, fields) {
     document.body.removeChild(link);
 
     showSuccess(`Exported ${data.length} rows to CSV`);
+}
+
+// Export table data to JSON
+function exportTableToJSON(data, fields) {
+    const visibleFields = fields.filter(f => f.visible);
+
+    // Convert data to JSON with only visible fields
+    const jsonData = data.map(row => {
+        const obj = {};
+        visibleFields.forEach(field => {
+            obj[field.name] = row[field.id] || '';
+        });
+        return obj;
+    });
+
+    // Create JSON content
+    const jsonContent = JSON.stringify(jsonData, null, 2);
+
+    // Create download link
+    const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const sectionName = currentSection ? currentSection.name.toLowerCase().replace(/\s+/g, '-') : 'data';
+    link.setAttribute('download', `${sectionName}-export-${timestamp}.json`);
+
+    // Trigger download
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showSuccess(`Exported ${data.length} rows to JSON`);
+}
+
+// Export table data to Excel with formatting
+function exportTableToExcel(data, fields) {
+    const visibleFields = fields.filter(f => f.visible);
+
+    // Create worksheet data
+    const wsData = [];
+
+    // Add headers
+    const headers = visibleFields.map(f => f.name);
+    wsData.push(headers);
+
+    // Add data rows
+    data.forEach(row => {
+        const rowData = visibleFields.map(field => {
+            let value = row[field.id];
+
+            // Format value based on field type
+            if (value === null || value === undefined) {
+                return '';
+            } else if (field.field_type === 'boolean' || field.field_type === 'toggle') {
+                return value ? 'Yes' : 'No';
+            } else if (field.field_type === 'date' || field.field_type === 'datetime') {
+                return value ? new Date(value).toLocaleString() : '';
+            } else if (typeof value === 'object') {
+                return JSON.stringify(value);
+            }
+
+            return value;
+        });
+        wsData.push(rowData);
+    });
+
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Set column widths
+    const colWidths = visibleFields.map(field => {
+        const maxLength = Math.max(
+            field.name.length,
+            ...data.slice(0, 100).map(row => {
+                const val = String(row[field.id] || '');
+                return val.length;
+            })
+        );
+        return { wch: Math.min(Math.max(maxLength + 2, 10), 50) };
+    });
+    ws['!cols'] = colWidths;
+
+    // Style header row
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+        if (!ws[cellAddress]) continue;
+
+        ws[cellAddress].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: "4F46E5" } },
+            alignment: { horizontal: "center", vertical: "center" }
+        };
+    }
+
+    // Add worksheet to workbook
+    const sectionName = currentSection ? currentSection.name : 'Data';
+    XLSX.utils.book_append_sheet(wb, ws, sectionName.substring(0, 31)); // Excel sheet names max 31 chars
+
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const filename = `${sectionName.toLowerCase().replace(/\s+/g, '-')}-export-${timestamp}.xlsx`;
+
+    // Write file
+    XLSX.writeFile(wb, filename);
+
+    showSuccess(`Exported ${data.length} rows to Excel`);
+}
+
+// Export table data to PDF with formatting
+function exportTableToPDF(data, fields) {
+    const visibleFields = fields.filter(f => f.visible);
+
+    // Initialize jsPDF
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({
+        orientation: visibleFields.length > 6 ? 'landscape' : 'portrait',
+        unit: 'mm',
+        format: 'a4'
+    });
+
+    // Add title
+    const sectionName = currentSection ? currentSection.name : 'Data Export';
+    doc.setFontSize(18);
+    doc.setTextColor(79, 70, 229); // Indigo color
+    doc.text(sectionName, 14, 20);
+
+    // Add metadata
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    const timestamp = new Date().toLocaleString();
+    doc.text(`Generated: ${timestamp}`, 14, 28);
+    doc.text(`Total Records: ${data.length}`, 14, 33);
+
+    // Prepare table data
+    const tableHeaders = [visibleFields.map(f => f.name)];
+    const tableData = data.map(row => {
+        return visibleFields.map(field => {
+            let value = row[field.id];
+
+            // Format value based on field type
+            if (value === null || value === undefined) {
+                return '';
+            } else if (field.field_type === 'boolean' || field.field_type === 'toggle') {
+                return value ? 'Yes' : 'No';
+            } else if (field.field_type === 'date' || field.field_type === 'datetime') {
+                return value ? new Date(value).toLocaleString() : '';
+            } else if (typeof value === 'object') {
+                return JSON.stringify(value);
+            }
+
+            return String(value);
+        });
+    });
+
+    // Generate table
+    doc.autoTable({
+        head: tableHeaders,
+        body: tableData,
+        startY: 40,
+        theme: 'striped',
+        headStyles: {
+            fillColor: [79, 70, 229], // Indigo
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            halign: 'center'
+        },
+        alternateRowStyles: {
+            fillColor: [249, 250, 251] // Light gray
+        },
+        margin: { top: 40, left: 14, right: 14 },
+        styles: {
+            fontSize: 8,
+            cellPadding: 3,
+            overflow: 'linebreak',
+            cellWidth: 'wrap'
+        },
+        columnStyles: visibleFields.reduce((acc, field, index) => {
+            // Adjust column widths based on field type
+            if (field.field_type === 'boolean' || field.field_type === 'toggle') {
+                acc[index] = { cellWidth: 15 };
+            } else if (field.field_type === 'date' || field.field_type === 'datetime') {
+                acc[index] = { cellWidth: 30 };
+            }
+            return acc;
+        }, {}),
+        didDrawPage: function(data) {
+            // Add page numbers
+            const pageCount = doc.internal.getNumberOfPages();
+            doc.setFontSize(8);
+            doc.setTextColor(150);
+            for (let i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+                doc.text(
+                    `Page ${i} of ${pageCount}`,
+                    doc.internal.pageSize.width / 2,
+                    doc.internal.pageSize.height - 10,
+                    { align: 'center' }
+                );
+            }
+        }
+    });
+
+    // Generate filename with timestamp
+    const fileTimestamp = new Date().toISOString().slice(0, 10);
+    const filename = `${sectionName.toLowerCase().replace(/\s+/g, '-')}-export-${fileTimestamp}.pdf`;
+
+    // Save PDF
+    doc.save(filename);
+
+    showSuccess(`Exported ${data.length} rows to PDF`);
+}
+
+// ===== DATA RELATIONSHIPS =====
+
+// Fetch and display related data for a record
+async function loadRelatedData(recordId, relationships) {
+    if (!relationships || relationships.length === 0) {
+        return null;
+    }
+
+    const relatedData = {};
+
+    for (const rel of relationships) {
+        try {
+            // Fetch related records
+            const response = await fetch(`/api/backoffices/${currentBackoffice.id}/sections/${rel.to_section}/actions/list_${rel.to_section}`);
+            if (response.ok) {
+                const data = await response.json();
+                // Filter related records based on the relationship
+                relatedData[rel.id] = {
+                    config: rel,
+                    records: data.filter(record => record[rel.to_field] === recordId)
+                };
+            }
+        } catch (error) {
+            console.error(`Failed to load related data for ${rel.name}:`, error);
+        }
+    }
+
+    return relatedData;
+}
+
+// Display relationships panel in view/edit mode
+function renderRelationshipsPanel(recordId, relationships, $container) {
+    if (!relationships || relationships.length === 0) {
+        return;
+    }
+
+    const $panel = $('<div>')
+        .addClass('mt-6 border-t pt-6');
+
+    const $header = $('<div>')
+        .addClass('flex items-center gap-2 mb-4')
+        .html('<i class="fas fa-link text-indigo-600"></i><h3 class="text-lg font-semibold text-gray-800">Related Data</h3>');
+
+    $panel.append($header);
+
+    // Create tabs for each relationship
+    const $tabContainer = $('<div>').addClass('border-b border-gray-200 mb-4');
+    const $tabButtons = $('<div>').addClass('flex space-x-2');
+    const $tabContent = $('<div>');
+
+    relationships.forEach((rel, index) => {
+        const isActive = index === 0;
+
+        // Tab button
+        const $tabBtn = $('<button>')
+            .addClass('px-4 py-2 border-b-2 transition-colors')
+            .addClass(isActive ? 'border-indigo-600 text-indigo-600 font-semibold' : 'border-transparent text-gray-600 hover:text-gray-800')
+            .attr('data-tab', rel.id)
+            .text(`${rel.name} (${rel.relationship_type})`)
+            .click(function() {
+                // Switch tabs
+                $tabButtons.find('button').removeClass('border-indigo-600 text-indigo-600 font-semibold').addClass('border-transparent text-gray-600');
+                $(this).addClass('border-indigo-600 text-indigo-600 font-semibold').removeClass('border-transparent text-gray-600');
+
+                $tabContent.find('.relationship-tab-content').addClass('hidden');
+                $tabContent.find(`[data-tab-content="${rel.id}"]`).removeClass('hidden');
+            });
+
+        $tabButtons.append($tabBtn);
+
+        // Tab content
+        const $content = $('<div>')
+            .addClass('relationship-tab-content')
+            .addClass(isActive ? '' : 'hidden')
+            .attr('data-tab-content', rel.id);
+
+        // Loading placeholder
+        $content.html('<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-2xl text-gray-400"></i><p class="mt-2 text-gray-600">Loading related data...</p></div>');
+
+        $tabContent.append($content);
+
+        // Load related data asynchronously
+        loadRelationshipData(recordId, rel, $content);
+    });
+
+    $tabContainer.append($tabButtons);
+    $panel.append($tabContainer);
+    $panel.append($tabContent);
+
+    $container.append($panel);
+}
+
+// Load data for a specific relationship
+async function loadRelationshipData(recordId, relationship, $container) {
+    try {
+        // Build query based on relationship
+        const response = await fetch(`/api/backoffices/${currentBackoffice.id}/sections/${relationship.to_section}/actions/list_${relationship.to_section}`);
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch related data');
+        }
+
+        const allData = await response.json();
+
+        // Filter based on relationship
+        const relatedRecords = allData.filter(record => {
+            if (relationship.relationship_type === 'onetomany' || relationship.relationship_type === 'manytoone') {
+                return String(record[relationship.to_field]) === String(recordId);
+            }
+            return false;
+        });
+
+        // Render related records table
+        $container.empty();
+
+        if (relatedRecords.length === 0) {
+            $container.html(`
+                <div class="text-center py-8 text-gray-500">
+                    <i class="fas fa-inbox text-4xl mb-2"></i>
+                    <p>No related records found</p>
+                </div>
+            `);
+            return;
+        }
+
+        // Create mini table for related records
+        const $table = $('<table>').addClass('min-w-full divide-y divide-gray-200');
+        const $thead = $('<thead>').addClass('bg-gray-50');
+        const $tbody = $('<tbody>').addClass('divide-y divide-gray-200');
+
+        // Determine which fields to display
+        const displayFields = relationship.display_fields || Object.keys(relatedRecords[0]).slice(0, 5);
+
+        // Header
+        const $headerRow = $('<tr>');
+        displayFields.forEach(fieldId => {
+            $headerRow.append(
+                $('<th>').addClass('px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider').text(fieldId)
+            );
+        });
+        $headerRow.append($('<th>').addClass('px-4 py-2 text-right text-xs font-medium text-gray-700 uppercase tracking-wider').text('Actions'));
+        $thead.append($headerRow);
+
+        // Rows
+        relatedRecords.forEach(record => {
+            const $row = $('<tr>').addClass('hover:bg-gray-50');
+
+            displayFields.forEach(fieldId => {
+                let value = record[fieldId];
+                if (value === null || value === undefined) value = '-';
+                if (typeof value === 'object') value = JSON.stringify(value);
+
+                $row.append(
+                    $('<td>').addClass('px-4 py-2 text-sm text-gray-900').text(String(value).substring(0, 50))
+                );
+            });
+
+            // Actions
+            const $actions = $('<td>').addClass('px-4 py-2 text-right text-sm');
+            const $viewBtn = $('<button>')
+                .addClass('text-indigo-600 hover:text-indigo-900 ml-2')
+                .html('<i class="fas fa-eye"></i>')
+                .attr('title', 'View')
+                .click(() => {
+                    // Navigate to related record
+                    showInfo(`View related record: ${record.id || 'N/A'}`);
+                });
+
+            $actions.append($viewBtn);
+            $row.append($actions);
+
+            $tbody.append($row);
+        });
+
+        $table.append($thead);
+        $table.append($tbody);
+
+        const $tableContainer = $('<div>').addClass('overflow-x-auto rounded-lg border border-gray-200');
+        $tableContainer.append($table);
+
+        $container.append($tableContainer);
+
+        // Show count
+        $container.prepend(
+            $('<div>')
+                .addClass('mb-3 text-sm text-gray-600')
+                .html(`<i class="fas fa-list mr-2"></i>Found ${relatedRecords.length} related record(s)`)
+        );
+
+    } catch (error) {
+        console.error('Error loading relationship data:', error);
+        $container.html(`
+            <div class="text-center py-8 text-red-500">
+                <i class="fas fa-exclamation-triangle text-4xl mb-2"></i>
+                <p>Failed to load related data</p>
+                <p class="text-sm mt-1">${error.message}</p>
+            </div>
+        `);
+    }
+}
+
+// Display relationship graph/visualization
+function renderRelationshipGraph(relationships) {
+    if (!relationships || relationships.length === 0) {
+        return;
+    }
+
+    // Create a simple visual representation of relationships
+    const $graph = $('<div>')
+        .addClass('p-4 bg-gray-50 rounded-lg border border-gray-200 mt-4');
+
+    const $title = $('<h4>')
+        .addClass('font-semibold text-gray-800 mb-3 flex items-center gap-2')
+        .html('<i class="fas fa-project-diagram"></i> Relationship Map');
+
+    $graph.append($title);
+
+    const $list = $('<div>').addClass('space-y-2');
+
+    relationships.forEach(rel => {
+        const $item = $('<div>')
+            .addClass('flex items-center gap-2 text-sm p-2 bg-white rounded border border-gray-200');
+
+        let icon = 'fa-arrow-right';
+        if (rel.relationship_type === 'onetomany') {
+            icon = 'fa-arrow-right';
+        } else if (rel.relationship_type === 'manytoone') {
+            icon = 'fa-arrow-left';
+        } else if (rel.relationship_type === 'onetoone') {
+            icon = 'fa-exchange-alt';
+        }
+
+        $item.html(`
+            <span class="font-semibold text-indigo-600">${rel.from_section}</span>
+            <i class="fas ${icon} text-gray-400"></i>
+            <span class="font-semibold text-green-600">${rel.to_section}</span>
+            <span class="text-gray-500 text-xs ml-auto">${rel.relationship_type}</span>
+            ${rel.cascade_delete ? '<span class="text-xs text-red-500 ml-2" title="Cascade delete enabled"><i class="fas fa-trash-alt"></i></span>' : ''}
+        `);
+
+        $list.append($item);
+    });
+
+    $graph.append($list);
+
+    return $graph;
+}
+
+// Handle cascade delete
+async function handleCascadeDelete(recordId, relationships) {
+    if (!relationships || relationships.length === 0) {
+        return true;
+    }
+
+    // Find relationships with cascade delete enabled
+    const cascadeRels = relationships.filter(rel => rel.cascade_delete);
+
+    if (cascadeRels.length === 0) {
+        return true;
+    }
+
+    // Warn user about cascade delete
+    const relNames = cascadeRels.map(r => r.name).join(', ');
+    const confirmed = confirm(
+        `This will also delete related records in: ${relNames}\n\nAre you sure you want to continue?`
+    );
+
+    if (!confirmed) {
+        return false;
+    }
+
+    // Delete related records
+    for (const rel of cascadeRels) {
+        try {
+            // Fetch related records
+            const response = await fetch(`/api/backoffices/${currentBackoffice.id}/sections/${rel.to_section}/actions/list_${rel.to_section}`);
+            if (response.ok) {
+                const allData = await response.json();
+                const relatedRecords = allData.filter(record => String(record[rel.to_field]) === String(recordId));
+
+                // Delete each related record
+                for (const record of relatedRecords) {
+                    await fetch(`/api/backoffices/${currentBackoffice.id}/sections/${rel.to_section}/actions/delete_${rel.to_section}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: record.id })
+                    });
+                }
+            }
+        } catch (error) {
+            console.error(`Failed to cascade delete for ${rel.name}:`, error);
+            showError(`Failed to delete related records in ${rel.name}`);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// ===== AUDIT TRAIL & HISTORY =====
+
+// Display audit metadata in view/edit mode
+function renderAuditMetadata(record, auditConfig, $container) {
+    if (!auditConfig || !auditConfig.track_changes) {
+        return;
+    }
+
+    const $panel = $('<div>')
+        .addClass('mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200');
+
+    const $header = $('<div>')
+        .addClass('flex items-center gap-2 mb-3')
+        .html('<i class="fas fa-history text-gray-600"></i><h4 class="font-semibold text-gray-800">Audit Information</h4>');
+
+    $panel.append($header);
+
+    const $grid = $('<div>').addClass('grid grid-cols-2 gap-4 text-sm');
+
+    // Created information
+    if (auditConfig.track_created) {
+        const createdAtField = auditConfig.created_at_field || 'created_at';
+        const createdByField = auditConfig.created_by_field || 'created_by';
+
+        if (record[createdAtField]) {
+            $grid.append(`
+                <div>
+                    <span class="text-gray-600">Created:</span>
+                    <span class="ml-2 font-medium">${new Date(record[createdAtField]).toLocaleString()}</span>
+                </div>
+            `);
+        }
+
+        if (record[createdByField]) {
+            $grid.append(`
+                <div>
+                    <span class="text-gray-600">Created By:</span>
+                    <span class="ml-2 font-medium">${record[createdByField]}</span>
+                </div>
+            `);
+        }
+    }
+
+    // Updated information
+    if (auditConfig.track_updated) {
+        const updatedAtField = auditConfig.updated_at_field || 'updated_at';
+        const updatedByField = auditConfig.updated_by_field || 'updated_by';
+
+        if (record[updatedAtField]) {
+            $grid.append(`
+                <div>
+                    <span class="text-gray-600">Last Updated:</span>
+                    <span class="ml-2 font-medium">${new Date(record[updatedAtField]).toLocaleString()}</span>
+                </div>
+            `);
+        }
+
+        if (record[updatedByField]) {
+            $grid.append(`
+                <div>
+                    <span class="text-gray-600">Updated By:</span>
+                    <span class="ml-2 font-medium">${record[updatedByField]}</span>
+                </div>
+            `);
+        }
+    }
+
+    $panel.append($grid);
+
+    // Add view history button
+    const $historyBtn = $('<button>')
+        .addClass('mt-3 px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors')
+        .html('<i class="fas fa-clock-rotate-left mr-2"></i>View Change History')
+        .click(() => showChangeHistory(record.id));
+
+    $panel.append($historyBtn);
+
+    $container.append($panel);
+}
+
+// Show change history modal
+async function showChangeHistory(recordId) {
+    // Create modal
+    const $modal = $('<div>')
+        .addClass('fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50')
+        .attr('id', 'history-modal');
+
+    const $content = $('<div>')
+        .addClass('bg-white rounded-lg shadow-xl max-w-4xl w-full m-4 max-h-[90vh] overflow-y-auto');
+
+    const $header = $('<div>')
+        .addClass('p-4 border-b flex justify-between items-center');
+
+    $header.append(`
+        <h3 class="text-xl font-semibold flex items-center gap-2">
+            <i class="fas fa-history text-indigo-600"></i>
+            Change History
+        </h3>
+    `);
+
+    const $closeBtn = $('<button>')
+        .addClass('text-gray-500 hover:text-gray-700')
+        .html('<i class="fas fa-times text-xl"></i>')
+        .click(() => $modal.remove());
+
+    $header.append($closeBtn);
+
+    const $body = $('<div>')
+        .addClass('p-4')
+        .html('<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-2xl text-gray-400"></i><p class="mt-2 text-gray-600">Loading history...</p></div>');
+
+    $content.append($header, $body);
+    $modal.append($content);
+    $('body').append($modal);
+
+    // Load change history
+    try {
+        const history = await fetchChangeHistory(recordId);
+        renderChangeHistory(history, $body);
+    } catch (error) {
+        $body.html(`
+            <div class="text-center py-8 text-red-500">
+                <i class="fas fa-exclamation-triangle text-4xl mb-2"></i>
+                <p>Failed to load change history</p>
+                <p class="text-sm mt-1">${error.message}</p>
+            </div>
+        `);
+    }
+
+    // Close on background click
+    $modal.click((e) => {
+        if (e.target === $modal[0]) {
+            $modal.remove();
+        }
+    });
+}
+
+// Fetch change history for a record
+async function fetchChangeHistory(recordId) {
+    // Simulate fetching history - in production this would call an API
+    // This is a placeholder that would normally fetch from backend
+    return [
+        {
+            id: '1',
+            timestamp: new Date(Date.now() - 86400000).toISOString(),
+            user: 'john@example.com',
+            action: 'update',
+            changes: {
+                name: { old: 'Old Name', new: 'New Name' },
+                status: { old: 'inactive', new: 'active' }
+            }
+        },
+        {
+            id: '2',
+            timestamp: new Date(Date.now() - 172800000).toISOString(),
+            user: 'admin@example.com',
+            action: 'update',
+            changes: {
+                email: { old: 'old@example.com', new: 'new@example.com' }
+            }
+        },
+        {
+            id: '3',
+            timestamp: new Date(Date.now() - 259200000).toISOString(),
+            user: 'admin@example.com',
+            action: 'create',
+            changes: {}
+        }
+    ];
+}
+
+// Render change history with diff view
+function renderChangeHistory(history, $container) {
+    $container.empty();
+
+    if (!history || history.length === 0) {
+        $container.html(`
+            <div class="text-center py-8 text-gray-500">
+                <i class="fas fa-inbox text-4xl mb-2"></i>
+                <p>No change history found</p>
+            </div>
+        `);
+        return;
+    }
+
+    const $timeline = $('<div>').addClass('space-y-4');
+
+    history.forEach((entry, index) => {
+        const $entry = $('<div>')
+            .addClass('flex gap-4 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors');
+
+        // Timeline indicator
+        const $indicator = $('<div>')
+            .addClass('flex flex-col items-center')
+            .html(`
+                <div class="w-10 h-10 rounded-full flex items-center justify-center ${
+                    entry.action === 'create' ? 'bg-green-100 text-green-600' :
+                    entry.action === 'update' ? 'bg-blue-100 text-blue-600' :
+                    'bg-red-100 text-red-600'
+                }">
+                    <i class="fas ${
+                        entry.action === 'create' ? 'fa-plus' :
+                        entry.action === 'update' ? 'fa-edit' :
+                        'fa-trash'
+                    }"></i>
+                </div>
+                ${index < history.length - 1 ? '<div class="flex-1 w-0.5 bg-gray-200 mt-2"></div>' : ''}
+            `);
+
+        // Entry details
+        const $details = $('<div>').addClass('flex-1');
+
+        const $meta = $('<div>')
+            .addClass('flex items-center gap-3 mb-2')
+            .html(`
+                <span class="font-semibold text-gray-900">${entry.user}</span>
+                <span class="text-sm text-gray-500">${new Date(entry.timestamp).toLocaleString()}</span>
+                <span class="px-2 py-1 text-xs rounded-full ${
+                    entry.action === 'create' ? 'bg-green-100 text-green-800' :
+                    entry.action === 'update' ? 'bg-blue-100 text-blue-800' :
+                    'bg-red-100 text-red-800'
+                }">${entry.action.toUpperCase()}</span>
+            `);
+
+        $details.append($meta);
+
+        // Show changes with diff view
+        if (entry.changes && Object.keys(entry.changes).length > 0) {
+            const $changes = $('<div>').addClass('mt-2 space-y-1');
+
+            Object.entries(entry.changes).forEach(([field, change]) => {
+                const $change = $('<div>')
+                    .addClass('text-sm p-2 bg-gray-50 rounded')
+                    .html(`
+                        <div class="font-medium text-gray-700 mb-1">${field}</div>
+                        <div class="flex items-center gap-2">
+                            <span class="px-2 py-1 bg-red-100 text-red-800 rounded line-through">${change.old || 'empty'}</span>
+                            <i class="fas fa-arrow-right text-gray-400"></i>
+                            <span class="px-2 py-1 bg-green-100 text-green-800 rounded">${change.new || 'empty'}</span>
+                        </div>
+                    `);
+
+                $changes.append($change);
+            });
+
+            $details.append($changes);
+
+            // Rollback button
+            if (entry.action !== 'create') {
+                const $rollbackBtn = $('<button>')
+                    .addClass('mt-2 px-3 py-1 text-xs bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors')
+                    .html('<i class="fas fa-undo mr-1"></i>Rollback to this version')
+                    .click(() => confirmRollback(entry));
+
+                $details.append($rollbackBtn);
+            }
+        } else if (entry.action === 'create') {
+            $details.append('<div class="text-sm text-gray-600">Record created</div>');
+        }
+
+        $entry.append($indicator, $details);
+        $timeline.append($entry);
+    });
+
+    $container.append($timeline);
+}
+
+// Confirm and perform rollback
+async function confirmRollback(historyEntry) {
+    const confirmed = confirm(
+        `Are you sure you want to rollback to this version?\n\nThis will undo all changes made after ${new Date(historyEntry.timestamp).toLocaleString()}`
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        // In production, this would call an API to perform the rollback
+        showInfo('Rollback functionality would restore this version');
+
+        // Close modal and refresh
+        $('#history-modal').remove();
+
+        // showSuccess('Record rolled back successfully');
+    } catch (error) {
+        showError(`Failed to rollback: ${error.message}`);
+    }
+}
+
+// Display activity log
+function showActivityLog() {
+    // Create modal
+    const $modal = $('<div>')
+        .addClass('fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50')
+        .attr('id', 'activity-modal');
+
+    const $content = $('<div>')
+        .addClass('bg-white rounded-lg shadow-xl max-w-6xl w-full m-4 max-h-[90vh] overflow-y-auto');
+
+    const $header = $('<div>')
+        .addClass('p-4 border-b flex justify-between items-center');
+
+    $header.append(`
+        <h3 class="text-xl font-semibold flex items-center gap-2">
+            <i class="fas fa-list-ul text-indigo-600"></i>
+            Activity Log
+        </h3>
+    `);
+
+    const $closeBtn = $('<button>')
+        .addClass('text-gray-500 hover:text-gray-700')
+        .html('<i class="fas fa-times text-xl"></i>')
+        .click(() => $modal.remove());
+
+    $header.append($closeBtn);
+
+    // Filters
+    const $filters = $('<div>')
+        .addClass('p-4 bg-gray-50 border-b flex gap-3')
+        .html(`
+            <select class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <option value="all">All Actions</option>
+                <option value="create">Create</option>
+                <option value="update">Update</option>
+                <option value="delete">Delete</option>
+            </select>
+            <select class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <option value="all">All Users</option>
+                <option value="admin">Admin</option>
+                <option value="john">John</option>
+            </select>
+            <input type="date" class="px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="From date">
+            <input type="date" class="px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="To date">
+            <button class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">
+                <i class="fas fa-filter mr-2"></i>Filter
+            </button>
+        `);
+
+    const $body = $('<div>')
+        .addClass('p-4')
+        .html('<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-2xl text-gray-400"></i><p class="mt-2 text-gray-600">Loading activity log...</p></div>');
+
+    $content.append($header, $filters, $body);
+    $modal.append($content);
+    $('body').append($modal);
+
+    // Load activity log
+    setTimeout(() => {
+        const activities = generateSampleActivityLog();
+        renderActivityLog(activities, $body);
+    }, 500);
+
+    // Close on background click
+    $modal.click((e) => {
+        if (e.target === $modal[0]) {
+            $modal.remove();
+        }
+    });
+}
+
+// Generate sample activity log data
+function generateSampleActivityLog() {
+    return [
+        {
+            id: '1',
+            timestamp: new Date(Date.now() - 3600000).toISOString(),
+            user: 'admin@example.com',
+            action: 'update',
+            section: 'users',
+            record_id: '123',
+            description: 'Updated user profile'
+        },
+        {
+            id: '2',
+            timestamp: new Date(Date.now() - 7200000).toISOString(),
+            user: 'john@example.com',
+            action: 'create',
+            section: 'products',
+            record_id: '456',
+            description: 'Created new product'
+        },
+        {
+            id: '3',
+            timestamp: new Date(Date.now() - 10800000).toISOString(),
+            user: 'admin@example.com',
+            action: 'delete',
+            section: 'users',
+            record_id: '789',
+            description: 'Deleted inactive user'
+        },
+        {
+            id: '4',
+            timestamp: new Date(Date.now() - 14400000).toISOString(),
+            user: 'john@example.com',
+            action: 'update',
+            section: 'settings',
+            record_id: '1',
+            description: 'Updated system settings'
+        },
+        {
+            id: '5',
+            timestamp: new Date(Date.now() - 18000000).toISOString(),
+            user: 'admin@example.com',
+            action: 'create',
+            section: 'users',
+            record_id: '999',
+            description: 'Created new admin user'
+        }
+    ];
+}
+
+// Render activity log table
+function renderActivityLog(activities, $container) {
+    $container.empty();
+
+    if (!activities || activities.length === 0) {
+        $container.html(`
+            <div class="text-center py-8 text-gray-500">
+                <i class="fas fa-inbox text-4xl mb-2"></i>
+                <p>No activities found</p>
+            </div>
+        `);
+        return;
+    }
+
+    const $table = $('<table>').addClass('min-w-full divide-y divide-gray-200');
+    const $thead = $('<thead>').addClass('bg-gray-50');
+    const $tbody = $('<tbody>').addClass('divide-y divide-gray-200');
+
+    // Header
+    $thead.html(`
+        <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Timestamp</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">User</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Action</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Section</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Record ID</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Description</th>
+        </tr>
+    `);
+
+    // Rows
+    activities.forEach(activity => {
+        const $row = $('<tr>').addClass('hover:bg-gray-50');
+
+        $row.html(`
+            <td class="px-4 py-3 text-sm text-gray-900">${new Date(activity.timestamp).toLocaleString()}</td>
+            <td class="px-4 py-3 text-sm text-gray-900">${activity.user}</td>
+            <td class="px-4 py-3 text-sm">
+                <span class="px-2 py-1 text-xs rounded-full ${
+                    activity.action === 'create' ? 'bg-green-100 text-green-800' :
+                    activity.action === 'update' ? 'bg-blue-100 text-blue-800' :
+                    'bg-red-100 text-red-800'
+                }">${activity.action.toUpperCase()}</span>
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-900">${activity.section}</td>
+            <td class="px-4 py-3 text-sm text-gray-900">${activity.record_id}</td>
+            <td class="px-4 py-3 text-sm text-gray-600">${activity.description}</td>
+        `);
+
+        $tbody.append($row);
+    });
+
+    $table.append($thead, $tbody);
+
+    const $tableContainer = $('<div>').addClass('overflow-x-auto rounded-lg border border-gray-200');
+    $tableContainer.append($table);
+
+    $container.append($tableContainer);
+
+    // Export button
+    const $exportBtn = $('<button>')
+        .addClass('mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors')
+        .html('<i class="fas fa-download mr-2"></i>Export Activity Log')
+        .click(() => {
+            exportActivityLogToCSV(activities);
+        });
+
+    $container.append($exportBtn);
+}
+
+// Export activity log to CSV
+function exportActivityLogToCSV(activities) {
+    const headers = ['Timestamp', 'User', 'Action', 'Section', 'Record ID', 'Description'];
+    const csvRows = [];
+    csvRows.push(headers.join(','));
+
+    activities.forEach(activity => {
+        const row = [
+            new Date(activity.timestamp).toISOString(),
+            activity.user,
+            activity.action,
+            activity.section,
+            activity.record_id,
+            activity.description
+        ];
+        csvRows.push(row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+    });
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `activity-log-${new Date().toISOString().slice(0, 10)}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showSuccess('Activity log exported to CSV');
 }
 
 // Inline editing functionality
