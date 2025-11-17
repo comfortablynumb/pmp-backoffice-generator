@@ -680,6 +680,7 @@ impl Default for UrlFieldConfig {
 pub struct PhoneFieldConfig {
     pub format: Option<String>,
     pub country_code: Option<String>,
+    #[serde(default)]
     pub allow_extensions: bool,
     pub validation_pattern: Option<String>,
 }
@@ -877,7 +878,9 @@ impl Default for ImageFieldConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsonFieldConfig {
     pub schema: Option<String>,
+    #[serde(default = "default_true")]
     pub pretty_print: bool,
+    #[serde(default = "default_true")]
     pub validate_on_change: bool,
     pub min_depth: Option<usize>,
     pub max_depth: Option<usize>,
