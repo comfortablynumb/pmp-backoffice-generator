@@ -239,7 +239,7 @@ async fn execute_action_handler(
     };
 
     // Create data source instance
-    let data_source = match data_source::create_data_source(ds_config) {
+    let data_source = match data_source::create_data_source(ds_config).await {
         Ok(ds) => ds,
         Err(e) => {
             return (
@@ -405,7 +405,7 @@ async fn execute_mutation_handler(
     };
 
     // Create data source instance
-    let data_source = match data_source::create_data_source(ds_config) {
+    let data_source = match data_source::create_data_source(ds_config).await {
         Ok(ds) => ds,
         Err(e) => {
             return (
