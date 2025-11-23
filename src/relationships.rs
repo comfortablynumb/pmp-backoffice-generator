@@ -417,5 +417,6 @@ pub struct CascadeOperation {
 pub enum CascadeOperationType {
     Delete,
     DeleteJunction,
+    #[allow(dead_code)]
     SetNull,
 }

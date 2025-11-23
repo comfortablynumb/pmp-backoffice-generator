@@ -103,37 +103,46 @@
 **Features**: `mongodb-datasource` (default)
 **Files**: `src/data_source.rs:358-487`
 
-### Partially Implemented (Stubs with Infrastructure)
-
-#### 6. Redis
-- Structure defined
-- Feature flag ready
-- **TODO**: Implement using redis crate
-- **Estimated**: 2-3 hours
+#### 6. Redis ✅
+- Full async Redis client
+- Key-value operations with JSON serialization
+- Key prefix support for namespacing
+- Connection verification with ping
+- GET operations for queries
+- SET operations for mutations
 
 **Features**: `redis-datasource` (default)
+**Files**: `src/data_source.rs:514-669`
 
-#### 7. Elasticsearch
+#### 7. S3 ✅
+- Full AWS S3 client
+- Object storage and retrieval
+- JSON serialization/deserialization
+- Key prefix support
+- Bucket access verification
+- Content-type handling
+
+**Features**: `s3-datasource` (default)
+**Files**: `src/data_source.rs:812-1028`
+
+#### 8. WebSocket ✅
+- Full WebSocket client with tokio-tungstenite
+- Real-time bidirectional communication
+- Connection verification
+- Text and binary message support
+- JSON response parsing
+- Query and mutation operations
+
+**Features**: `websocket-datasource` (default)
+**Files**: `src/data_source.rs:1144-1388`
+
+### Partially Implemented (Stubs with Infrastructure)
+
+#### 9. Elasticsearch
 - Structure defined
 - Can use reqwest REST API
 - **TODO**: Implement search, index, update operations
 - **Estimated**: 2-3 hours
-
-#### 8. S3
-- Structure defined
-- Feature flag ready
-- **TODO**: Implement using aws-sdk-s3
-- **Estimated**: 3-4 hours
-
-**Features**: `s3-datasource` (default)
-
-#### 9. WebSocket
-- Structure defined
-- Feature flag ready
-- **TODO**: Implement using tokio-tungstenite
-- **Estimated**: 3-4 hours
-
-**Features**: `websocket-datasource` (default)
 
 ### Stub Only (Need External Dependencies)
 
@@ -201,9 +210,12 @@
 
 ### Nearly Ready (Need Testing)
 - MongoDB data source
+- Redis data source
+- S3 data source
+- WebSocket data source
 
 ### Not Production Ready
-- Redis, Elasticsearch, S3, WebSocket (stubs)
+- Elasticsearch (partial stub)
 - gRPC, Kafka, Firebase (require implementation)
 
 ---
@@ -211,25 +223,25 @@
 ## Next Steps (Priority Order)
 
 ### High Priority (Production Blockers - if needed)
-1. Implement Redis if Redis data sources are used
+1. Add comprehensive integration tests for Redis, S3, WebSocket, MongoDB
 2. Implement Elasticsearch if search is needed
-3. Implement S3 if file storage is needed
-4. Add authentication/authorization
-5. Add rate limiting
+3. Add authentication/authorization
+4. Add rate limiting
 
 ### Medium Priority
-6. Implement WebSocket for real-time updates
-7. Add comprehensive integration tests
-8. Implement gRPC if microservices are used
-9. Implement Kafka if event streaming is used
-10. Implement Firebase if using Firebase backend
+5. Implement gRPC if microservices are used
+6. Implement Kafka if event streaming is used
+7. Implement Firebase if using Firebase backend
+8. Add performance benchmarks for data sources
 
 ### Low Priority
-11. Add user attribution to audit logs (extract from auth headers)
-12. Fetch old data before delete for audit trail
-13. Implement rollback functionality
-14. Add bulk operations
-15. Add Excel/PDF export
+9. Add user attribution to audit logs (extract from auth headers)
+10. Fetch old data before delete for audit trail
+11. Implement rollback functionality
+12. Add bulk operations
+13. Add Excel/PDF export
+14. Implement reconnection logic for WebSocket
+15. Add heartbeat support for WebSocket connections
 
 ---
 

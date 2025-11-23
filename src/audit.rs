@@ -3,10 +3,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::fs::{create_dir_all, File, OpenOptions};
+use std::fs::{create_dir_all, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 /// Audit log entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,6 +138,7 @@ impl AuditLogger {
     }
 
     /// Create an audit entry for an update operation
+    #[allow(dead_code)]
     pub fn update_entry(
         section_id: String,
         record_id: String,
@@ -207,6 +208,7 @@ impl AuditLogger {
     }
 
     /// Clean up old audit logs based on retention policy
+    #[allow(dead_code)]
     pub fn cleanup_old_logs(&self, retention_days: u32) -> anyhow::Result<()> {
         info!(
             retention_days = retention_days,
@@ -251,6 +253,7 @@ impl AuditLogger {
 }
 
 /// Compute changes between old and new data
+#[allow(dead_code)]
 fn compute_changes(
     old_data: &HashMap<String, Value>,
     new_data: &HashMap<String, Value>,

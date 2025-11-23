@@ -636,11 +636,11 @@ mod tests {
             Value::String("test@example.com".to_string()),
         );
 
-        let errors = validate_data(&data, &[field.clone()]).unwrap();
+        let errors = validate_data(&data, std::slice::from_ref(&field)).unwrap();
         assert_eq!(errors.len(), 0);
 
         data.insert("email".to_string(), Value::String("invalid".to_string()));
-        let errors = validate_data(&data, &[field]).unwrap();
+        let errors = validate_data(&data, std::slice::from_ref(&field)).unwrap();
         assert_eq!(errors.len(), 1);
     }
 

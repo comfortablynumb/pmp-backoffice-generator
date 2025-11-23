@@ -1,12 +1,13 @@
 use crate::config::{DataSourceConfig, DatabaseType};
 use anyhow::{anyhow, Result};
-use serde_json::Value;
+use serde_json::{json, Value};
 use sqlx::{
     any::{AnyPoolOptions, AnyRow},
     AnyPool, Column, Row, TypeInfo,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::{debug, error, info, warn};
 
 /// Data source trait for executing queries
 #[async_trait::async_trait]
@@ -445,7 +446,7 @@ impl DataSource for MongoDBDataSource {
     }
 
     async fn execute_mutation(&self, _query: &str, data: &HashMap<String, Value>) -> Result<Value> {
-        use mongodb::bson::{doc, Document};
+        use mongodb::bson::Document;
 
         tracing::info!(
             database = %self.database_name,
@@ -512,22 +513,50 @@ impl DataSource for MongoDBDataSource {
 }
 
 /// Redis data source
+#[cfg(feature = "redis-datasource")]
 pub struct RedisDataSource {
-    #[allow(dead_code)]
-    connection_string: String,
-    #[allow(dead_code)]
+    client: redis::Client,
     key_prefix: Option<String>,
 }
 
+#[cfg(feature = "redis-datasource")]
 impl RedisDataSource {
-    pub fn new(connection_string: String, key_prefix: Option<String>) -> Self {
-        Self {
-            connection_string,
-            key_prefix,
+    pub async fn new(connection_string: String, key_prefix: Option<String>) -> Result<Self> {
+        tracing::info!(
+            connection_string = %connection_string,
+            "Connecting to Redis"
+        );
+
+        let client = redis::Client::open(connection_string)
+            .map_err(|e| anyhow!("Failed to create Redis client: {}", e))?;
+
+        // Test connection
+        let mut con = client
+            .get_async_connection()
+            .await
+            .map_err(|e| anyhow!("Failed to connect to Redis: {}", e))?;
+
+        // Ping to verify connection
+        redis::cmd("PING")
+            .query_async::<_, String>(&mut con)
+            .await
+            .map_err(|e| anyhow!("Redis ping failed: {}", e))?;
+
+        tracing::info!("Redis connection established");
+
+        Ok(Self { client, key_prefix })
+    }
+
+    fn prefixed_key(&self, key: &str) -> String {
+        if let Some(prefix) = &self.key_prefix {
+            format!("{}:{}", prefix, key)
+        } else {
+            key.to_string()
         }
     }
 }
 
+#[cfg(feature = "redis-datasource")]
 #[async_trait::async_trait]
 impl DataSource for RedisDataSource {
     async fn execute_query(
@@ -535,16 +564,105 @@ impl DataSource for RedisDataSource {
         key: &str,
         _params: Option<&HashMap<String, Value>>,
     ) -> Result<Vec<HashMap<String, Value>>> {
-        tracing::warn!("Redis query execution not yet fully implemented: {}", key);
-        Ok(vec![])
+        use redis::AsyncCommands;
+
+        tracing::info!(key = %key, "Executing Redis query");
+
+        let mut con = self
+            .client
+            .get_async_connection()
+            .await
+            .map_err(|e| anyhow!("Failed to get Redis connection: {}", e))?;
+
+        let prefixed_key = self.prefixed_key(key);
+
+        // Try to get as string first
+        let value: Option<String> = con
+            .get(&prefixed_key)
+            .await
+            .map_err(|e| anyhow!("Redis GET failed: {}", e))?;
+
+        if let Some(val) = value {
+            // Try to parse as JSON
+            if let Ok(json_value) = serde_json::from_str::<Value>(&val) {
+                if let Value::Object(obj) = json_value {
+                    return Ok(vec![obj.into_iter().collect()]);
+                } else if let Value::Array(arr) = json_value {
+                    let mut results = Vec::new();
+                    for item in arr {
+                        if let Value::Object(obj) = item {
+                            results.push(obj.into_iter().collect());
+                        }
+                    }
+                    return Ok(results);
+                }
+            }
+
+            // If not JSON, return as string value
+            let mut map = HashMap::new();
+            map.insert("value".to_string(), Value::String(val));
+            Ok(vec![map])
+        } else {
+            Ok(vec![])
+        }
     }
 
-    async fn execute_mutation(&self, key: &str, _data: &HashMap<String, Value>) -> Result<Value> {
-        tracing::warn!(
-            "Redis mutation execution not yet fully implemented: {}",
-            key
-        );
-        Ok(Value::Bool(true))
+    async fn execute_mutation(&self, key: &str, data: &HashMap<String, Value>) -> Result<Value> {
+        use redis::AsyncCommands;
+
+        tracing::info!(key = %key, "Executing Redis mutation");
+
+        let mut con = self
+            .client
+            .get_async_connection()
+            .await
+            .map_err(|e| anyhow!("Failed to get Redis connection: {}", e))?;
+
+        let prefixed_key = self.prefixed_key(key);
+
+        // Convert data to JSON string
+        let json_str = serde_json::to_string(data)?;
+
+        // Set the value
+        let result: String = con
+            .set(&prefixed_key, json_str)
+            .await
+            .map_err(|e| anyhow!("Redis SET failed: {}", e))?;
+
+        tracing::info!(result = %result, "Redis mutation completed");
+
+        Ok(Value::String(result))
+    }
+}
+
+// Stub implementation when feature is disabled
+#[cfg(not(feature = "redis-datasource"))]
+pub struct RedisDataSource {
+    _phantom: std::marker::PhantomData<()>,
+}
+
+#[cfg(not(feature = "redis-datasource"))]
+impl RedisDataSource {
+    pub async fn new(_connection_string: String, _key_prefix: Option<String>) -> Result<Self> {
+        Err(anyhow!(
+            "Redis support not enabled. Enable the 'redis-datasource' feature in Cargo.toml"
+        ))
+    }
+}
+
+#[cfg(not(feature = "redis-datasource"))]
+#[async_trait::async_trait]
+impl DataSource for RedisDataSource {
+    async fn execute_query(
+        &self,
+        _key: &str,
+        _params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        Err(anyhow!("Redis support not enabled"))
+    }
+
+    async fn execute_mutation(&self, _key: &str, _data: &HashMap<String, Value>) -> Result<Value> {
+        Err(anyhow!("Redis support not enabled"))
     }
 }
 
@@ -689,26 +807,72 @@ impl DataSource for KafkaDataSource {
     }
 }
 
-/// S3 data source
+/// S3 data source for object storage
+#[cfg(feature = "s3-datasource")]
 pub struct S3DataSource {
-    #[allow(dead_code)]
+    client: aws_sdk_s3::Client,
     bucket: String,
-    #[allow(dead_code)]
-    region: String,
-    #[allow(dead_code)]
     prefix: Option<String>,
 }
 
+#[cfg(feature = "s3-datasource")]
 impl S3DataSource {
-    pub fn new(bucket: String, region: String, prefix: Option<String>) -> Self {
-        Self {
+    pub async fn new(bucket: String, region: String, prefix: Option<String>) -> Result<Self> {
+        use aws_config::BehaviorVersion;
+
+        info!(
+            bucket = %bucket,
+            region = %region,
+            prefix = ?prefix,
+            "Initializing S3 data source"
+        );
+
+        // Load AWS configuration
+        let config = aws_config::defaults(BehaviorVersion::latest())
+            .region(aws_config::Region::new(region))
+            .load()
+            .await;
+
+        let client = aws_sdk_s3::Client::new(&config);
+
+        // Verify bucket access by attempting to list objects
+        match client
+            .list_objects_v2()
+            .bucket(&bucket)
+            .max_keys(1)
+            .send()
+            .await
+        {
+            Ok(_) => {
+                info!(bucket = %bucket, "Successfully connected to S3 bucket");
+            }
+            Err(e) => {
+                error!(
+                    bucket = %bucket,
+                    error = %e,
+                    "Failed to access S3 bucket"
+                );
+                return Err(anyhow!("Failed to access S3 bucket: {}", e));
+            }
+        }
+
+        Ok(Self {
+            client,
             bucket,
-            region,
             prefix,
+        })
+    }
+
+    fn full_key(&self, key: &str) -> String {
+        if let Some(prefix) = &self.prefix {
+            format!("{}/{}", prefix, key)
+        } else {
+            key.to_string()
         }
     }
 }
 
+#[cfg(feature = "s3-datasource")]
 #[async_trait::async_trait]
 impl DataSource for S3DataSource {
     async fn execute_query(
@@ -716,13 +880,146 @@ impl DataSource for S3DataSource {
         key: &str,
         _params: Option<&HashMap<String, Value>>,
     ) -> Result<Vec<HashMap<String, Value>>> {
-        tracing::warn!("S3 query execution not yet fully implemented: {}", key);
-        Ok(vec![])
+        let full_key = self.full_key(key);
+
+        debug!(
+            bucket = %self.bucket,
+            key = %full_key,
+            "Fetching object from S3"
+        );
+
+        // Get object from S3
+        let result = self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(&full_key)
+            .send()
+            .await;
+
+        match result {
+            Ok(output) => {
+                let bytes = output.body.collect().await?.into_bytes();
+                let content = String::from_utf8(bytes.to_vec())?;
+
+                debug!(
+                    key = %full_key,
+                    size = bytes.len(),
+                    "Successfully fetched object from S3"
+                );
+
+                // Try to parse as JSON
+                match serde_json::from_str::<Value>(&content) {
+                    Ok(Value::Array(arr)) => {
+                        // If it's a JSON array, parse each element
+                        let mut result = Vec::new();
+                        for item in arr {
+                            if let Value::Object(obj) = item {
+                                result.push(obj.into_iter().collect());
+                            }
+                        }
+                        Ok(result)
+                    }
+                    Ok(Value::Object(obj)) => {
+                        // If it's a JSON object, return it as a single-item array
+                        Ok(vec![obj.into_iter().collect()])
+                    }
+                    _ => {
+                        // If it's not JSON or not an array/object, return as a single field
+                        let mut map = HashMap::new();
+                        map.insert("content".to_string(), Value::String(content));
+                        map.insert("key".to_string(), Value::String(full_key));
+                        Ok(vec![map])
+                    }
+                }
+            }
+            Err(e) => {
+                warn!(
+                    key = %full_key,
+                    error = %e,
+                    "Failed to fetch object from S3"
+                );
+                Err(anyhow!("Failed to fetch object from S3: {}", e))
+            }
+        }
     }
 
-    async fn execute_mutation(&self, key: &str, _data: &HashMap<String, Value>) -> Result<Value> {
-        tracing::warn!("S3 mutation execution not yet fully implemented: {}", key);
-        Ok(Value::Bool(true))
+    async fn execute_mutation(&self, key: &str, data: &HashMap<String, Value>) -> Result<Value> {
+        use aws_sdk_s3::primitives::ByteStream;
+
+        let full_key = self.full_key(key);
+
+        debug!(
+            bucket = %self.bucket,
+            key = %full_key,
+            "Storing object in S3"
+        );
+
+        // Serialize data to JSON
+        let json = serde_json::to_string(data)?;
+        let bytes = ByteStream::from(json.into_bytes());
+
+        // Put object in S3
+        let result = self
+            .client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(&full_key)
+            .body(bytes)
+            .content_type("application/json")
+            .send()
+            .await;
+
+        match result {
+            Ok(output) => {
+                info!(
+                    key = %full_key,
+                    etag = ?output.e_tag(),
+                    "Successfully stored object in S3"
+                );
+                Ok(json!({"success": true, "key": full_key}))
+            }
+            Err(e) => {
+                error!(
+                    key = %full_key,
+                    error = %e,
+                    "Failed to store object in S3"
+                );
+                Err(anyhow!("Failed to store object in S3: {}", e))
+            }
+        }
+    }
+}
+
+// Stub when feature is disabled
+#[cfg(not(feature = "s3-datasource"))]
+pub struct S3DataSource {
+    #[allow(dead_code)]
+    bucket: String,
+}
+
+#[cfg(not(feature = "s3-datasource"))]
+impl S3DataSource {
+    pub async fn new(bucket: String, _region: String, _prefix: Option<String>) -> Result<Self> {
+        Err(anyhow!(
+            "S3 support not enabled. Enable the 's3-datasource' feature in Cargo.toml"
+        ))
+    }
+}
+
+#[cfg(not(feature = "s3-datasource"))]
+#[async_trait::async_trait]
+impl DataSource for S3DataSource {
+    async fn execute_query(
+        &self,
+        _key: &str,
+        _params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        Err(anyhow!("S3 support not enabled"))
+    }
+
+    async fn execute_mutation(&self, _key: &str, _data: &HashMap<String, Value>) -> Result<Value> {
+        Err(anyhow!("S3 support not enabled"))
     }
 }
 
@@ -844,9 +1141,9 @@ impl DataSource for SupabaseDataSource {
     }
 }
 
-/// WebSocket data source
+/// WebSocket data source for real-time communication
+#[cfg(feature = "websocket-datasource")]
 pub struct WebSocketDataSource {
-    #[allow(dead_code)]
     url: String,
     #[allow(dead_code)]
     reconnect: bool,
@@ -854,40 +1151,240 @@ pub struct WebSocketDataSource {
     heartbeat_interval: Option<u32>,
 }
 
+#[cfg(feature = "websocket-datasource")]
 impl WebSocketDataSource {
-    pub fn new(url: String, reconnect: bool, heartbeat_interval: Option<u32>) -> Self {
-        Self {
+    pub async fn new(
+        url: String,
+        reconnect: bool,
+        heartbeat_interval: Option<u32>,
+    ) -> Result<Self> {
+        use tokio_tungstenite::connect_async;
+
+        info!(
+            url = %url,
+            reconnect = reconnect,
+            heartbeat_interval = ?heartbeat_interval,
+            "Initializing WebSocket data source"
+        );
+
+        // Test connection
+        match connect_async(&url).await {
+            Ok((ws_stream, _)) => {
+                info!(url = %url, "Successfully connected to WebSocket");
+                drop(ws_stream); // Close test connection
+            }
+            Err(e) => {
+                error!(
+                    url = %url,
+                    error = %e,
+                    "Failed to connect to WebSocket"
+                );
+                return Err(anyhow!("Failed to connect to WebSocket: {}", e));
+            }
+        }
+
+        Ok(Self {
             url,
             reconnect,
             heartbeat_interval,
-        }
+        })
+    }
+
+    async fn connect(
+        &self,
+    ) -> Result<
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+    > {
+        use tokio_tungstenite::connect_async;
+
+        debug!(url = %self.url, "Connecting to WebSocket");
+
+        let (ws_stream, _) = connect_async(&self.url)
+            .await
+            .map_err(|e| anyhow!("WebSocket connection failed: {}", e))?;
+
+        Ok(ws_stream)
     }
 }
 
+#[cfg(feature = "websocket-datasource")]
 #[async_trait::async_trait]
 impl DataSource for WebSocketDataSource {
     async fn execute_query(
         &self,
         message: &str,
-        _params: Option<&HashMap<String, Value>>,
+        params: Option<&HashMap<String, Value>>,
     ) -> Result<Vec<HashMap<String, Value>>> {
-        tracing::warn!(
-            "WebSocket query execution not yet fully implemented: {}",
-            message
-        );
-        Ok(vec![])
+        use futures_util::{SinkExt, StreamExt};
+        use tokio_tungstenite::tungstenite::Message;
+
+        let mut ws_stream = self.connect().await?;
+
+        // Prepare the query message
+        let query_data = if let Some(params) = params {
+            let mut data = params.clone();
+            data.insert("query".to_string(), Value::String(message.to_string()));
+            serde_json::to_string(&data)?
+        } else {
+            message.to_string()
+        };
+
+        debug!(message_length = query_data.len(), "Sending WebSocket query");
+
+        // Send the query
+        ws_stream
+            .send(Message::Text(query_data))
+            .await
+            .map_err(|e| anyhow!("Failed to send WebSocket message: {}", e))?;
+
+        // Wait for response
+        match ws_stream.next().await {
+            Some(Ok(Message::Text(text))) => {
+                debug!(response_length = text.len(), "Received WebSocket response");
+
+                // Try to parse as JSON
+                match serde_json::from_str::<Value>(&text) {
+                    Ok(Value::Array(arr)) => {
+                        let mut result = Vec::new();
+                        for item in arr {
+                            if let Value::Object(obj) = item {
+                                result.push(obj.into_iter().collect());
+                            }
+                        }
+                        Ok(result)
+                    }
+                    Ok(Value::Object(obj)) => Ok(vec![obj.into_iter().collect()]),
+                    _ => {
+                        // If not JSON, return as text
+                        let mut map = HashMap::new();
+                        map.insert("response".to_string(), Value::String(text));
+                        Ok(vec![map])
+                    }
+                }
+            }
+            Some(Ok(Message::Binary(bytes))) => {
+                // Handle binary response
+                let text = String::from_utf8_lossy(&bytes).to_string();
+                let mut map = HashMap::new();
+                map.insert("response".to_string(), Value::String(text));
+                Ok(vec![map])
+            }
+            Some(Ok(Message::Close(_))) => {
+                warn!("WebSocket connection closed by server");
+                Err(anyhow!("WebSocket connection closed by server"))
+            }
+            Some(Err(e)) => {
+                error!(error = %e, "WebSocket error");
+                Err(anyhow!("WebSocket error: {}", e))
+            }
+            None => {
+                warn!("WebSocket stream ended unexpectedly");
+                Err(anyhow!("WebSocket stream ended unexpectedly"))
+            }
+            _ => {
+                warn!("Unexpected WebSocket message type");
+                Ok(vec![])
+            }
+        }
     }
 
     async fn execute_mutation(
         &self,
         message: &str,
+        data: &HashMap<String, Value>,
+    ) -> Result<Value> {
+        use futures_util::{SinkExt, StreamExt};
+        use tokio_tungstenite::tungstenite::Message;
+
+        let mut ws_stream = self.connect().await?;
+
+        // Prepare the mutation message
+        let mut mutation_data = data.clone();
+        mutation_data.insert("mutation".to_string(), Value::String(message.to_string()));
+        let json = serde_json::to_string(&mutation_data)?;
+
+        debug!(message_length = json.len(), "Sending WebSocket mutation");
+
+        // Send the mutation
+        ws_stream
+            .send(Message::Text(json))
+            .await
+            .map_err(|e| anyhow!("Failed to send WebSocket message: {}", e))?;
+
+        // Wait for response
+        match ws_stream.next().await {
+            Some(Ok(Message::Text(text))) => {
+                info!(
+                    response_length = text.len(),
+                    "Received WebSocket mutation response"
+                );
+
+                // Try to parse as JSON
+                match serde_json::from_str::<Value>(&text) {
+                    Ok(value) => Ok(value),
+                    Err(_) => Ok(Value::String(text)),
+                }
+            }
+            Some(Ok(Message::Binary(bytes))) => {
+                let text = String::from_utf8_lossy(&bytes).to_string();
+                Ok(Value::String(text))
+            }
+            Some(Ok(Message::Close(_))) => {
+                warn!("WebSocket connection closed by server");
+                Err(anyhow!("WebSocket connection closed by server"))
+            }
+            Some(Err(e)) => {
+                error!(error = %e, "WebSocket error");
+                Err(anyhow!("WebSocket error: {}", e))
+            }
+            None => {
+                warn!("WebSocket stream ended unexpectedly");
+                Err(anyhow!("WebSocket stream ended unexpectedly"))
+            }
+            _ => Ok(json!({"success": true})),
+        }
+    }
+}
+
+// Stub when feature is disabled
+#[cfg(not(feature = "websocket-datasource"))]
+pub struct WebSocketDataSource {
+    #[allow(dead_code)]
+    url: String,
+}
+
+#[cfg(not(feature = "websocket-datasource"))]
+impl WebSocketDataSource {
+    pub async fn new(
+        url: String,
+        _reconnect: bool,
+        _heartbeat_interval: Option<u32>,
+    ) -> Result<Self> {
+        Err(anyhow!(
+            "WebSocket support not enabled. Enable the 'websocket-datasource' feature in Cargo.toml"
+        ))
+    }
+}
+
+#[cfg(not(feature = "websocket-datasource"))]
+#[async_trait::async_trait]
+impl DataSource for WebSocketDataSource {
+    async fn execute_query(
+        &self,
+        _message: &str,
+        _params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        Err(anyhow!("WebSocket support not enabled"))
+    }
+
+    async fn execute_mutation(
+        &self,
+        _message: &str,
         _data: &HashMap<String, Value>,
     ) -> Result<Value> {
-        tracing::warn!(
-            "WebSocket mutation execution not yet fully implemented: {}",
-            message
-        );
-        Ok(Value::Bool(true))
+        Err(anyhow!("WebSocket support not enabled"))
     }
 }
 
@@ -927,10 +1424,9 @@ pub async fn create_data_source(config: &DataSourceConfig) -> Result<Box<dyn Dat
         DataSourceConfig::Redis {
             connection_string,
             key_prefix,
-        } => Ok(Box::new(RedisDataSource::new(
-            connection_string.clone(),
-            key_prefix.clone(),
-        ))),
+        } => Ok(Box::new(
+            RedisDataSource::new(connection_string.clone(), key_prefix.clone()).await?,
+        )),
         DataSourceConfig::Elasticsearch { nodes, index, .. } => Ok(Box::new(
             ElasticsearchDataSource::new(nodes.clone(), index.clone()),
         )),
@@ -959,11 +1455,9 @@ pub async fn create_data_source(config: &DataSourceConfig) -> Result<Box<dyn Dat
             region,
             prefix,
             ..
-        } => Ok(Box::new(S3DataSource::new(
-            bucket.clone(),
-            region.clone(),
-            prefix.clone(),
-        ))),
+        } => Ok(Box::new(
+            S3DataSource::new(bucket.clone(), region.clone(), prefix.clone()).await?,
+        )),
         DataSourceConfig::Firebase {
             project_id,
             collection,
@@ -985,10 +1479,8 @@ pub async fn create_data_source(config: &DataSourceConfig) -> Result<Box<dyn Dat
             url,
             reconnect,
             heartbeat_interval,
-        } => Ok(Box::new(WebSocketDataSource::new(
-            url.clone(),
-            *reconnect,
-            *heartbeat_interval,
-        ))),
+        } => Ok(Box::new(
+            WebSocketDataSource::new(url.clone(), *reconnect, *heartbeat_interval).await?,
+        )),
     }
 }
