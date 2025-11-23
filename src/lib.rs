@@ -1,5 +1,6 @@
 // Library exports for testing and potential reuse
 
+pub mod audit;
 pub mod config;
 pub mod data_source;
 pub mod relationships;

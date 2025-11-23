@@ -356,25 +356,41 @@ impl DataSource for GraphQLDataSource {
 }
 
 /// MongoDB data source
+#[cfg(feature = "mongodb-datasource")]
 pub struct MongoDBDataSource {
-    #[allow(dead_code)]
-    connection_string: String,
-    #[allow(dead_code)]
-    database: String,
-    #[allow(dead_code)]
-    collection: String,
+    client: mongodb::Client,
+    database_name: String,
+    collection_name: String,
 }
 
+#[cfg(feature = "mongodb-datasource")]
 impl MongoDBDataSource {
-    pub fn new(connection_string: String, database: String, collection: String) -> Self {
-        Self {
-            connection_string,
-            database,
-            collection,
-        }
+    pub async fn new(
+        connection_string: String,
+        database: String,
+        collection: String,
+    ) -> Result<Self> {
+        tracing::info!(
+            database = %database,
+            collection = %collection,
+            "Connecting to MongoDB"
+        );
+
+        let client = mongodb::Client::with_uri_str(&connection_string)
+            .await
+            .map_err(|e| anyhow!("Failed to connect to MongoDB: {}", e))?;
+
+        tracing::info!("MongoDB connection established");
+
+        Ok(Self {
+            client,
+            database_name: database,
+            collection_name: collection,
+        })
     }
 }
 
+#[cfg(feature = "mongodb-datasource")]
 #[async_trait::async_trait]
 impl DataSource for MongoDBDataSource {
     async fn execute_query(
@@ -382,19 +398,116 @@ impl DataSource for MongoDBDataSource {
         query: &str,
         _params: Option<&HashMap<String, Value>>,
     ) -> Result<Vec<HashMap<String, Value>>> {
-        tracing::warn!(
-            "MongoDB query execution not yet fully implemented: {}",
-            query
+        use futures_util::TryStreamExt;
+        use mongodb::bson::{doc, Document};
+
+        tracing::info!(
+            query = %query,
+            database = %self.database_name,
+            collection = %self.collection_name,
+            "Executing MongoDB query"
         );
-        Ok(vec![])
+
+        let db = self.client.database(&self.database_name);
+        let collection = db.collection::<Document>(&self.collection_name);
+
+        // Parse query as BSON document (expected to be JSON)
+        let filter: Document = if query.is_empty() || query == "{}" {
+            doc! {}
+        } else {
+            serde_json::from_str(query)
+                .map_err(|e| anyhow!("Invalid MongoDB filter JSON: {}", e))?
+        };
+
+        let mut cursor = collection
+            .find(filter, None)
+            .await
+            .map_err(|e| anyhow!("MongoDB find failed: {}", e))?;
+
+        let mut results = Vec::new();
+        while let Some(doc) = cursor
+            .try_next()
+            .await
+            .map_err(|e| anyhow!("Failed to read MongoDB cursor: {}", e))?
+        {
+            // Convert BSON document to JSON
+            let json_str = serde_json::to_string(&doc)
+                .map_err(|e| anyhow!("Failed to serialize BSON to JSON: {}", e))?;
+            let json_value: Value = serde_json::from_str(&json_str)?;
+
+            if let Value::Object(obj) = json_value {
+                results.push(obj.into_iter().collect());
+            }
+        }
+
+        tracing::info!(count = results.len(), "MongoDB query completed");
+        Ok(results)
     }
 
-    async fn execute_mutation(&self, query: &str, _data: &HashMap<String, Value>) -> Result<Value> {
-        tracing::warn!(
-            "MongoDB mutation execution not yet fully implemented: {}",
-            query
+    async fn execute_mutation(&self, _query: &str, data: &HashMap<String, Value>) -> Result<Value> {
+        use mongodb::bson::{doc, Document};
+
+        tracing::info!(
+            database = %self.database_name,
+            collection = %self.collection_name,
+            "Executing MongoDB mutation"
         );
-        Ok(Value::Bool(true))
+
+        let db = self.client.database(&self.database_name);
+        let collection = db.collection::<Document>(&self.collection_name);
+
+        // Convert HashMap to BSON document
+        let json_str = serde_json::to_string(data)?;
+        let document: Document = serde_json::from_str(&json_str)
+            .map_err(|e| anyhow!("Failed to convert data to BSON: {}", e))?;
+
+        let result = collection
+            .insert_one(document, None)
+            .await
+            .map_err(|e| anyhow!("MongoDB insert failed: {}", e))?;
+
+        tracing::info!(inserted_id = ?result.inserted_id, "MongoDB mutation completed");
+
+        Ok(Value::String(result.inserted_id.to_string()))
+    }
+}
+
+// Stub implementation when feature is disabled
+#[cfg(not(feature = "mongodb-datasource"))]
+pub struct MongoDBDataSource {
+    _phantom: std::marker::PhantomData<()>,
+}
+
+#[cfg(not(feature = "mongodb-datasource"))]
+impl MongoDBDataSource {
+    pub async fn new(
+        _connection_string: String,
+        _database: String,
+        _collection: String,
+    ) -> Result<Self> {
+        Err(anyhow!(
+            "MongoDB support not enabled. Enable the 'mongodb-datasource' feature in Cargo.toml"
+        ))
+    }
+}
+
+#[cfg(not(feature = "mongodb-datasource"))]
+#[async_trait::async_trait]
+impl DataSource for MongoDBDataSource {
+    async fn execute_query(
+        &self,
+        _query: &str,
+        _params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        Err(anyhow!("MongoDB support not enabled"))
+    }
+
+    async fn execute_mutation(
+        &self,
+        _query: &str,
+        _data: &HashMap<String, Value>,
+    ) -> Result<Value> {
+        Err(anyhow!("MongoDB support not enabled"))
     }
 }
 
@@ -803,11 +916,14 @@ pub async fn create_data_source(config: &DataSourceConfig) -> Result<Box<dyn Dat
             connection_string,
             database,
             collection,
-        } => Ok(Box::new(MongoDBDataSource::new(
-            connection_string.clone(),
-            database.clone(),
-            collection.clone(),
-        ))),
+        } => Ok(Box::new(
+            MongoDBDataSource::new(
+                connection_string.clone(),
+                database.clone(),
+                collection.clone(),
+            )
+            .await?,
+        )),
         DataSourceConfig::Redis {
             connection_string,
             key_prefix,

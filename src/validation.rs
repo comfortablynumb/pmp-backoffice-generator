@@ -15,9 +15,7 @@ pub fn validate_data(
 
     for field in fields {
         // Check required fields
-        if field.required
-            && (!data.contains_key(&field.id) || data[&field.id].is_null())
-        {
+        if field.required && (!data.contains_key(&field.id) || data[&field.id].is_null()) {
             errors.push(ValidationError {
                 field: field.id.clone(),
                 message: format!("{} is required", field.name),
@@ -407,7 +405,10 @@ fn validate_rule(
         ValidationType::Isbn => {
             if let Some(s) = value.as_str() {
                 // Simplified ISBN validation - checks for ISBN-10 or ISBN-13 format
-                let isbn_regex = Regex::new(r"^(?:ISBN(?:-1[03])?:?\s*)?(?:[0-9]{9}[0-9X]|(?:97[89])?[0-9]{10})$").unwrap();
+                let isbn_regex = Regex::new(
+                    r"^(?:ISBN(?:-1[03])?:?\s*)?(?:[0-9]{9}[0-9X]|(?:97[89])?[0-9]{10})$",
+                )
+                .unwrap();
                 let normalized = s.replace(&['-', ' '][..], "");
                 if !isbn_regex.is_match(&normalized) {
                     return Err(anyhow!("{} must be a valid ISBN", field.name));
