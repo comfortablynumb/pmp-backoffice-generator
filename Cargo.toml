@@ -16,10 +16,16 @@ serde_json = "1.0"
 serde_yaml = "0.9"
 
 # Database support
-sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "postgres", "mysql", "sqlite"], optional = true }
+sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "postgres", "mysql", "sqlite", "json"] }
 
 # HTTP client for API data sources
 reqwest = { version = "0.11", features = ["json"] }
+
+# Validation
+regex = "1.10"
+chrono = "0.4"
+uuid = { version = "1.6", features = ["v4"] }
+validator = "0.18"
 
 # Utilities
 anyhow = "1.0"
@@ -31,7 +37,7 @@ async-trait = "0.1"
 
 [features]
 default = ["database"]
-database = ["sqlx"]
+database = []
 
 [lib]
 name = "pmp_backoffice_generator"

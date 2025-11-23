@@ -1,5 +1,7 @@
-use crate::config::{AppConfig, BackofficeConfig};
+use crate::config::{ActionType, AppConfig, BackofficeConfig};
 use crate::data_source;
+use crate::relationships;
+use crate::validation;
 use anyhow::Result;
 use axum::{
     extract::{Path, Query, State},
@@ -13,7 +15,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tower_http::services::ServeDir;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 /// Application state
 #[derive(Clone)]
@@ -239,7 +241,7 @@ async fn execute_action_handler(
     };
 
     // Create data source instance
-    let data_source = match data_source::create_data_source(ds_config) {
+    let data_source = match data_source::create_data_source(ds_config).await {
         Ok(ds) => ds,
         Err(e) => {
             return (
@@ -356,6 +358,13 @@ async fn execute_mutation_handler(
     Path((backoffice_id, section_id, action_id)): Path<(String, String, String)>,
     Json(payload): Json<MutationData>,
 ) -> impl IntoResponse {
+    info!(
+        backoffice_id = %backoffice_id,
+        section_id = %section_id,
+        action_id = %action_id,
+        "Processing mutation request"
+    );
+
     // Find the backoffice
     let backoffice = match state.backoffices.iter().find(|b| b.id == backoffice_id) {
         Some(b) => b,
@@ -392,8 +401,167 @@ async fn execute_mutation_handler(
         }
     };
 
-    // Get the data source
-    let ds_config = match backoffice.data_sources.get(&action.data_source) {
+    // Get fields from the action for validation
+    let fields = match &action.action_type {
+        ActionType::Form { fields, .. } => fields,
+        ActionType::Custom { fields } => fields,
+        _ => {
+            warn!("Mutation attempted on non-form action");
+            &vec![]
+        }
+    };
+
+    // Step 1: Validate data against field configurations
+    info!("Validating request data");
+    match validation::validate_data(&payload.data, fields) {
+        Ok(validation_errors) => {
+            if !validation_errors.is_empty() {
+                let error_messages: Vec<serde_json::Value> = validation_errors
+                    .iter()
+                    .map(|e| {
+                        serde_json::json!({
+                            "field": e.field,
+                            "message": e.message
+                        })
+                    })
+                    .collect();
+
+                warn!(error_count = validation_errors.len(), "Validation failed");
+
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({
+                        "error": "Validation failed",
+                        "validation_errors": error_messages
+                    })),
+                )
+                    .into_response();
+            }
+        }
+        Err(e) => {
+            error!(error = %e, "Validation error");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("Validation error: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+
+    // Step 2: Create data sources map for relationship validation
+    let mut data_sources_map: HashMap<String, Box<dyn data_source::DataSource>> = HashMap::new();
+    for (name, ds_config) in &backoffice.data_sources {
+        match data_source::create_data_source(ds_config).await {
+            Ok(ds) => {
+                data_sources_map.insert(name.clone(), ds);
+            }
+            Err(e) => {
+                error!(
+                    data_source = %name,
+                    error = %e,
+                    "Failed to create data source"
+                );
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": format!("Failed to create data source: {}", e)})),
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    // Step 3: Validate foreign key relationships
+    info!("Validating foreign key relationships");
+    match relationships::validate_foreign_keys(
+        &payload.data,
+        &section_id,
+        backoffice,
+        &data_sources_map,
+    )
+    .await
+    {
+        Ok(relationship_errors) => {
+            if !relationship_errors.is_empty() {
+                let error_messages: Vec<serde_json::Value> = relationship_errors
+                    .iter()
+                    .map(|e| {
+                        serde_json::json!({
+                            "relationship_id": e.relationship_id,
+                            "field": e.field,
+                            "message": e.message
+                        })
+                    })
+                    .collect();
+
+                warn!(
+                    error_count = relationship_errors.len(),
+                    "Relationship validation failed"
+                );
+
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({
+                        "error": "Relationship validation failed",
+                        "relationship_errors": error_messages
+                    })),
+                )
+                    .into_response();
+            }
+        }
+        Err(e) => {
+            error!(error = %e, "Relationship validation error");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": format!("Relationship validation error: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+
+    // Step 4: Validate many-to-many relationships
+    match relationships::validate_many_to_many(
+        &payload.data,
+        &section_id,
+        backoffice,
+        &data_sources_map,
+    )
+    .await
+    {
+        Ok(m2m_errors) => {
+            if !m2m_errors.is_empty() {
+                let error_messages: Vec<serde_json::Value> = m2m_errors
+                    .iter()
+                    .map(|e| {
+                        serde_json::json!({
+                            "relationship_id": e.relationship_id,
+                            "field": e.field,
+                            "message": e.message
+                        })
+                    })
+                    .collect();
+
+                warn!(
+                    error_count = m2m_errors.len(),
+                    "Many-to-many relationship validation failed"
+                );
+
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({
+                        "error": "Many-to-many relationship validation failed",
+                        "relationship_errors": error_messages
+                    })),
+                )
+                    .into_response();
+            }
+        }
+        Err(e) => {
+            error!(error = %e, "Many-to-many validation error");
+        }
+    }
+
+    // Get the data source for execution
+    let data_source = match data_sources_map.get(&action.data_source) {
         Some(ds) => ds,
         None => {
             return (
@@ -404,36 +572,32 @@ async fn execute_mutation_handler(
         }
     };
 
-    // Create data source instance
-    let data_source = match data_source::create_data_source(ds_config) {
-        Ok(ds) => ds,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response()
-        }
-    };
-
-    // Execute the mutation
+    // Step 5: Execute the mutation
     let query_str = action
         .query
         .as_deref()
         .or(action.endpoint.as_deref())
         .unwrap_or("");
 
+    info!(query = %query_str, "Executing mutation");
+
     match data_source.execute_mutation(query_str, &payload.data).await {
-        Ok(result) => (
-            StatusCode::OK,
-            Json(serde_json::json!({"success": true, "data": result})),
-        )
-            .into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Ok(result) => {
+            info!("Mutation executed successfully");
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({"success": true, "data": result})),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            error!(error = %e, "Mutation execution failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
     }
 }
 

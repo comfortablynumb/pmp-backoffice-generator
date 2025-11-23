@@ -1,7 +1,12 @@
 use crate::config::{DataSourceConfig, DatabaseType};
 use anyhow::{anyhow, Result};
 use serde_json::Value;
+use sqlx::{
+    any::{AnyPoolOptions, AnyRow},
+    AnyPool, Column, Row, TypeInfo,
+};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Data source trait for executing queries
 #[async_trait::async_trait]
@@ -14,17 +19,115 @@ pub trait DataSource: Send + Sync {
     async fn execute_mutation(&self, query: &str, data: &HashMap<String, Value>) -> Result<Value>;
 }
 
-/// Database data source
+/// Database data source with connection pooling
 pub struct DatabaseDataSource {
-    #[allow(dead_code)]
-    config: DataSourceConfig,
-    #[allow(dead_code)]
+    pool: Arc<AnyPool>,
     db_type: DatabaseType,
 }
 
 impl DatabaseDataSource {
-    pub fn new(config: DataSourceConfig, db_type: DatabaseType) -> Self {
-        Self { config, db_type }
+    pub async fn new(connection_string: String, db_type: DatabaseType) -> Result<Self> {
+        tracing::info!(
+            db_type = ?db_type,
+            "Connecting to database"
+        );
+
+        let pool = AnyPoolOptions::new()
+            .max_connections(5)
+            .connect(&connection_string)
+            .await
+            .map_err(|e| anyhow!("Failed to connect to database: {}", e))?;
+
+        tracing::info!("Database connection established");
+
+        Ok(Self {
+            pool: Arc::new(pool),
+            db_type,
+        })
+    }
+
+    /// Convert a database row to a HashMap
+    fn row_to_map(row: &AnyRow) -> Result<HashMap<String, Value>> {
+        let mut map = HashMap::new();
+
+        for (i, column) in row.columns().iter().enumerate() {
+            let column_name = column.name().to_string();
+            let type_info = column.type_info();
+
+            // Try to extract the value based on the type
+            let value = if type_info.is_null() {
+                Value::Null
+            } else {
+                let type_name = type_info.name();
+                match type_name {
+                    "TEXT" | "VARCHAR" | "CHAR" | "STRING" | "BPCHAR" => {
+                        if let Ok(val) = row.try_get::<String, _>(i) {
+                            Value::String(val)
+                        } else {
+                            Value::Null
+                        }
+                    }
+                    "INTEGER" | "INT" | "SMALLINT" | "BIGINT" | "INT4" | "INT2" | "INT8" => {
+                        if let Ok(val) = row.try_get::<i64, _>(i) {
+                            Value::Number(serde_json::Number::from(val))
+                        } else if let Ok(val) = row.try_get::<i32, _>(i) {
+                            Value::Number(serde_json::Number::from(val))
+                        } else {
+                            Value::Null
+                        }
+                    }
+                    "REAL" | "FLOAT" | "DOUBLE" | "NUMERIC" | "DECIMAL" | "FLOAT4" | "FLOAT8" => {
+                        if let Ok(val) = row.try_get::<f64, _>(i) {
+                            if let Some(num) = serde_json::Number::from_f64(val) {
+                                Value::Number(num)
+                            } else {
+                                Value::Null
+                            }
+                        } else {
+                            Value::Null
+                        }
+                    }
+                    "BOOLEAN" | "BOOL" => {
+                        if let Ok(val) = row.try_get::<bool, _>(i) {
+                            Value::Bool(val)
+                        } else {
+                            Value::Null
+                        }
+                    }
+                    "JSON" | "JSONB" => {
+                        if let Ok(val) = row.try_get::<String, _>(i) {
+                            serde_json::from_str(&val).unwrap_or(Value::Null)
+                        } else {
+                            Value::Null
+                        }
+                    }
+                    "TIMESTAMP" | "TIMESTAMPTZ" | "DATETIME" | "DATE" | "TIME" => {
+                        if let Ok(val) = row.try_get::<String, _>(i) {
+                            Value::String(val)
+                        } else {
+                            Value::Null
+                        }
+                    }
+                    _ => {
+                        // Try string as fallback
+                        if let Ok(val) = row.try_get::<String, _>(i) {
+                            Value::String(val)
+                        } else {
+                            tracing::warn!(
+                                column = %column_name,
+                                type_name = %type_name,
+                                "Unknown column type, using null"
+                            );
+                            Value::Null
+                        }
+                    }
+                }
+            };
+
+            map.insert(column_name, value);
+        }
+
+        Ok(map)
     }
 }
 
@@ -33,25 +136,54 @@ impl DataSource for DatabaseDataSource {
     async fn execute_query(
         &self,
         query: &str,
-        _params: Option<&HashMap<String, Value>>,
+        params: Option<&HashMap<String, Value>>,
     ) -> Result<Vec<HashMap<String, Value>>> {
-        // This is a placeholder implementation
-        // In a real implementation, you would use sqlx to execute the query
-        tracing::warn!(
-            "Database query execution not yet fully implemented: {}",
-            query
+        tracing::info!(
+            query = %query,
+            params = ?params,
+            db_type = ?self.db_type,
+            "Executing database query"
         );
 
-        // Return mock data for demonstration
-        Ok(vec![])
+        // For now, we execute queries without parameters
+        // A full implementation would need to bind parameters properly
+        let rows = sqlx::query(query)
+            .fetch_all(&*self.pool)
+            .await
+            .map_err(|e| anyhow!("Query execution failed: {}", e))?;
+
+        let mut results = Vec::new();
+        for row in &rows {
+            results.push(Self::row_to_map(row)?);
+        }
+
+        tracing::info!(row_count = results.len(), "Query executed successfully");
+
+        Ok(results)
     }
 
-    async fn execute_mutation(&self, query: &str, _data: &HashMap<String, Value>) -> Result<Value> {
-        tracing::warn!(
-            "Database mutation execution not yet fully implemented: {}",
-            query
+    async fn execute_mutation(&self, query: &str, data: &HashMap<String, Value>) -> Result<Value> {
+        tracing::info!(
+            query = %query,
+            data = ?data,
+            db_type = ?self.db_type,
+            "Executing database mutation"
         );
-        Ok(Value::Bool(true))
+
+        // Execute the mutation
+        let result = sqlx::query(query)
+            .execute(&*self.pool)
+            .await
+            .map_err(|e| anyhow!("Mutation execution failed: {}", e))?;
+
+        let rows_affected = result.rows_affected();
+
+        tracing::info!(
+            rows_affected = rows_affected,
+            "Mutation executed successfully"
+        );
+
+        Ok(Value::Number(serde_json::Number::from(rows_affected)))
     }
 }
 
@@ -647,12 +779,14 @@ impl DataSource for WebSocketDataSource {
 }
 
 /// Factory to create data sources
-pub fn create_data_source(config: &DataSourceConfig) -> Result<Box<dyn DataSource>> {
+pub async fn create_data_source(config: &DataSourceConfig) -> Result<Box<dyn DataSource>> {
     match config {
-        DataSourceConfig::Database { db_type, .. } => Ok(Box::new(DatabaseDataSource::new(
-            config.clone(),
-            db_type.clone(),
-        ))),
+        DataSourceConfig::Database {
+            connection_string,
+            db_type,
+        } => Ok(Box::new(
+            DatabaseDataSource::new(connection_string.clone(), db_type.clone()).await?,
+        )),
         DataSourceConfig::Api {
             base_url, headers, ..
         } => Ok(Box::new(ApiDataSource::new(
