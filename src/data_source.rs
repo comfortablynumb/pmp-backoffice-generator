@@ -9,6 +9,25 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
+/// Pagination parameters for data source queries
+#[derive(Debug, Clone)]
+pub struct PaginationParams {
+    pub page: usize,
+    pub page_size: usize,
+    pub offset: usize,
+}
+
+impl PaginationParams {
+    pub fn new(page: usize, page_size: usize) -> Self {
+        let offset = (page - 1) * page_size;
+        Self {
+            page,
+            page_size,
+            offset,
+        }
+    }
+}
+
 /// Data source trait for executing queries
 #[async_trait::async_trait]
 pub trait DataSource: Send + Sync {
@@ -17,6 +36,15 @@ pub trait DataSource: Send + Sync {
         query: &str,
         params: Option<&HashMap<String, Value>>,
     ) -> Result<Vec<HashMap<String, Value>>>;
+
+    /// Execute query with server-side pagination support
+    async fn execute_query_paginated(
+        &self,
+        query: &str,
+        params: Option<&HashMap<String, Value>>,
+        pagination: Option<&PaginationParams>,
+    ) -> Result<Vec<HashMap<String, Value>>>;
+
     async fn execute_mutation(&self, query: &str, data: &HashMap<String, Value>) -> Result<Value>;
 }
 
@@ -139,16 +167,38 @@ impl DataSource for DatabaseDataSource {
         query: &str,
         params: Option<&HashMap<String, Value>>,
     ) -> Result<Vec<HashMap<String, Value>>> {
+        self.execute_query_paginated(query, params, None).await
+    }
+
+    async fn execute_query_paginated(
+        &self,
+        query: &str,
+        params: Option<&HashMap<String, Value>>,
+        pagination: Option<&PaginationParams>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        let final_query = if let Some(p) = pagination {
+            // Add LIMIT and OFFSET to the query for server-side pagination
+            format!(
+                "{} LIMIT {} OFFSET {}",
+                query.trim_end_matches(';'),
+                p.page_size,
+                p.offset
+            )
+        } else {
+            query.to_string()
+        };
+
         tracing::info!(
-            query = %query,
+            query = %final_query,
             params = ?params,
             db_type = ?self.db_type,
+            pagination = ?pagination,
             "Executing database query"
         );
 
-        // For now, we execute queries without parameters
-        // A full implementation would need to bind parameters properly
-        let rows = sqlx::query(query)
+        // Execute query without parameter binding for now
+        // A full implementation would need to bind parameters properly using sqlx::query!
+        let rows = sqlx::query(&final_query)
             .fetch_all(&*self.pool)
             .await
             .map_err(|e| anyhow!("Query execution failed: {}", e))?;
@@ -193,16 +243,59 @@ pub struct ApiDataSource {
     base_url: String,
     client: reqwest::Client,
     headers: HashMap<String, String>,
+    timeout_secs: u64,
+    max_retries: u32,
 }
 
 impl ApiDataSource {
     pub fn new(base_url: String, headers: Option<HashMap<String, String>>) -> Self {
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+
         Self {
             base_url,
             client,
             headers: headers.unwrap_or_default(),
+            timeout_secs: 30,
+            max_retries: 3,
         }
+    }
+
+    async fn execute_with_retry<F, Fut>(&self, operation: F) -> Result<Value>
+    where
+        F: Fn() -> Fut,
+        Fut: std::future::Future<Output = Result<Value>>,
+    {
+        let mut last_error = None;
+
+        for attempt in 0..=self.max_retries {
+            if attempt > 0 {
+                let delay_ms = 2u64.pow(attempt) * 100; // Exponential backoff: 200ms, 400ms, 800ms
+                debug!(
+                    attempt = attempt,
+                    delay_ms = delay_ms,
+                    "Retrying API request after delay"
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+            }
+
+            match operation().await {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    warn!(
+                        attempt = attempt,
+                        max_retries = self.max_retries,
+                        error = %e,
+                        "API request failed"
+                    );
+                    last_error = Some(e);
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| anyhow!("API request failed after all retries")))
     }
 }
 
@@ -213,42 +306,111 @@ impl DataSource for ApiDataSource {
         endpoint: &str,
         params: Option<&HashMap<String, Value>>,
     ) -> Result<Vec<HashMap<String, Value>>> {
+        self.execute_query_paginated(endpoint, params, None).await
+    }
+
+    async fn execute_query_paginated(
+        &self,
+        endpoint: &str,
+        params: Option<&HashMap<String, Value>>,
+        pagination: Option<&PaginationParams>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
         let url = format!("{}/{}", self.base_url, endpoint);
 
-        let mut request = self.client.get(&url);
+        debug!(
+            url = %url,
+            pagination = ?pagination,
+            "Executing API query"
+        );
 
-        // Add headers
-        for (key, value) in &self.headers {
-            request = request.header(key, value);
-        }
+        // Clone necessary data for the retry closure
+        let url_clone = url.clone();
+        let headers = self.headers.clone();
+        let params_clone = params.cloned();
+        let pagination_clone = pagination.cloned();
+        let client = self.client.clone();
 
-        // Add query parameters
-        if let Some(params) = params {
-            for (key, value) in params {
-                if let Some(s) = value.as_str() {
-                    request = request.query(&[(key, s)]);
+        let result = self
+            .execute_with_retry(|| {
+                let url = url_clone.clone();
+                let headers = headers.clone();
+                let params = params_clone.clone();
+                let pagination = pagination_clone.clone();
+                let client = client.clone();
+
+                async move {
+                    let mut request = client.get(&url);
+
+                    // Add headers
+                    for (key, value) in &headers {
+                        request = request.header(key, value);
+                    }
+
+                    // Add query parameters
+                    if let Some(params) = params.as_ref() {
+                        for (key, value) in params.iter() {
+                            if let Some(s) = value.as_str() {
+                                request = request.query(&[(key, s)]);
+                            } else {
+                                request = request.query(&[(key, value.to_string())]);
+                            }
+                        }
+                    }
+
+                    // Add pagination parameters
+                    if let Some(p) = pagination.as_ref() {
+                        request = request
+                            .query(&[("page", p.page.to_string())])
+                            .query(&[("page_size", p.page_size.to_string())])
+                            .query(&[("limit", p.page_size.to_string())])
+                            .query(&[("offset", p.offset.to_string())]);
+                    }
+
+                    let response = request
+                        .send()
+                        .await
+                        .map_err(|e| anyhow!("API request failed: {}", e))?;
+
+                    if !response.status().is_success() {
+                        return Err(anyhow!("API returned error status: {}", response.status()));
+                    }
+
+                    let data: Value = response
+                        .json()
+                        .await
+                        .map_err(|e| anyhow!("Failed to parse API response: {}", e))?;
+
+                    Ok(data)
                 }
-            }
-        }
-
-        let response = request.send().await?;
-        let data: Value = response.json().await?;
+            })
+            .await?;
 
         // Try to convert the response to a list of objects
-        match data {
+        match result {
             Value::Array(arr) => {
-                let mut result = Vec::new();
+                let mut result_vec = Vec::new();
                 for item in arr {
                     if let Value::Object(obj) = item {
                         let map: HashMap<String, Value> = obj.into_iter().collect();
-                        result.push(map);
+                        result_vec.push(map);
                     }
                 }
-                Ok(result)
+                Ok(result_vec)
             }
             Value::Object(obj) => {
-                let map: HashMap<String, Value> = obj.into_iter().collect();
-                Ok(vec![map])
+                // Check if it's a paginated response with a data field
+                if let Some(Value::Array(arr)) = obj.get("data") {
+                    let mut result_vec = Vec::new();
+                    for item in arr {
+                        if let Value::Object(item_obj) = item {
+                            result_vec.push(item_obj.clone().into_iter().collect());
+                        }
+                    }
+                    Ok(result_vec)
+                } else {
+                    let map: HashMap<String, Value> = obj.into_iter().collect();
+                    Ok(vec![map])
+                }
             }
             _ => Err(anyhow!("Unexpected API response format")),
         }
@@ -261,17 +423,50 @@ impl DataSource for ApiDataSource {
     ) -> Result<Value> {
         let url = format!("{}/{}", self.base_url, endpoint);
 
-        let mut request = self.client.post(&url);
+        debug!(url = %url, "Executing API mutation");
 
-        // Add headers
-        for (key, value) in &self.headers {
-            request = request.header(key, value);
-        }
+        // Clone necessary data for the retry closure
+        let url_clone = url.clone();
+        let headers = self.headers.clone();
+        let data_clone = data.clone();
+        let client = self.client.clone();
 
-        let response = request.json(&data).send().await?;
-        let result: Value = response.json().await?;
+        self.execute_with_retry(|| {
+            let url = url_clone.clone();
+            let headers = headers.clone();
+            let data = data_clone.clone();
+            let client = client.clone();
 
-        Ok(result)
+            async move {
+                let mut request = client.post(&url);
+
+                // Add headers
+                for (key, value) in &headers {
+                    request = request.header(key, value);
+                }
+
+                let response = request
+                    .json(&data)
+                    .send()
+                    .await
+                    .map_err(|e| anyhow!("API mutation request failed: {}", e))?;
+
+                if !response.status().is_success() {
+                    return Err(anyhow!(
+                        "API mutation returned error status: {}",
+                        response.status()
+                    ));
+                }
+
+                let result: Value = response
+                    .json()
+                    .await
+                    .map_err(|e| anyhow!("Failed to parse API mutation response: {}", e))?;
+
+                Ok(result)
+            }
+        })
+        .await
     }
 }
 
@@ -280,16 +475,57 @@ pub struct GraphQLDataSource {
     endpoint: String,
     client: reqwest::Client,
     headers: HashMap<String, String>,
+    max_retries: u32,
 }
 
 impl GraphQLDataSource {
     pub fn new(endpoint: String, headers: Option<HashMap<String, String>>) -> Self {
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+
         Self {
             endpoint,
             client,
             headers: headers.unwrap_or_default(),
+            max_retries: 3,
         }
+    }
+
+    async fn execute_with_retry<F, Fut>(&self, operation: F) -> Result<Value>
+    where
+        F: Fn() -> Fut,
+        Fut: std::future::Future<Output = Result<Value>>,
+    {
+        let mut last_error = None;
+
+        for attempt in 0..=self.max_retries {
+            if attempt > 0 {
+                let delay_ms = 2u64.pow(attempt) * 100;
+                debug!(
+                    attempt = attempt,
+                    delay_ms = delay_ms,
+                    "Retrying GraphQL request after delay"
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+            }
+
+            match operation().await {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    warn!(
+                        attempt = attempt,
+                        max_retries = self.max_retries,
+                        error = %e,
+                        "GraphQL request failed"
+                    );
+                    last_error = Some(e);
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| anyhow!("GraphQL request failed after all retries")))
     }
 }
 
@@ -300,29 +536,131 @@ impl DataSource for GraphQLDataSource {
         query: &str,
         params: Option<&HashMap<String, Value>>,
     ) -> Result<Vec<HashMap<String, Value>>> {
-        let mut request_body = HashMap::new();
-        request_body.insert("query", Value::String(query.to_string()));
+        self.execute_query_paginated(query, params, None).await
+    }
 
-        if let Some(params) = params {
-            request_body.insert(
-                "variables",
-                Value::Object(params.clone().into_iter().collect()),
-            );
+    async fn execute_query_paginated(
+        &self,
+        query: &str,
+        params: Option<&HashMap<String, Value>>,
+        pagination: Option<&PaginationParams>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        debug!(
+            endpoint = %self.endpoint,
+            pagination = ?pagination,
+            "Executing GraphQL query"
+        );
+
+        // Prepare variables with pagination
+        let mut variables = params.cloned().unwrap_or_default();
+        if let Some(p) = pagination {
+            variables.insert("limit".to_string(), Value::Number(p.page_size.into()));
+            variables.insert("offset".to_string(), Value::Number(p.offset.into()));
+            variables.insert("page".to_string(), Value::Number(p.page.into()));
+            variables.insert("pageSize".to_string(), Value::Number(p.page_size.into()));
         }
 
-        let mut request = self.client.post(&self.endpoint);
+        // Clone necessary data for the retry closure
+        let endpoint = self.endpoint.clone();
+        let headers = self.headers.clone();
+        let query_str = query.to_string();
+        let variables_clone = variables.clone();
+        let client = self.client.clone();
 
-        // Add headers
-        for (key, value) in &self.headers {
-            request = request.header(key, value);
-        }
+        let data = self
+            .execute_with_retry(|| {
+                let endpoint = endpoint.clone();
+                let headers = headers.clone();
+                let query = query_str.clone();
+                let variables = variables_clone.clone();
+                let client = client.clone();
 
-        let response = request.json(&request_body).send().await?;
-        let data: Value = response.json().await?;
+                async move {
+                    let mut request_body = HashMap::new();
+                    request_body.insert("query", Value::String(query));
+
+                    if !variables.is_empty() {
+                        request_body
+                            .insert("variables", Value::Object(variables.into_iter().collect()));
+                    }
+
+                    let mut request = client.post(&endpoint);
+
+                    // Add headers
+                    for (key, value) in &headers {
+                        request = request.header(key, value);
+                    }
+
+                    let response = request
+                        .json(&request_body)
+                        .send()
+                        .await
+                        .map_err(|e| anyhow!("GraphQL request failed: {}", e))?;
+
+                    if !response.status().is_success() {
+                        return Err(anyhow!(
+                            "GraphQL returned error status: {}",
+                            response.status()
+                        ));
+                    }
+
+                    let data: Value = response
+                        .json()
+                        .await
+                        .map_err(|e| anyhow!("Failed to parse GraphQL response: {}", e))?;
+
+                    // Check for GraphQL errors
+                    if let Some(obj) = data.as_object() {
+                        if let Some(Value::Array(errors)) = obj.get("errors") {
+                            let error_messages: Vec<String> = errors
+                                .iter()
+                                .filter_map(|e| {
+                                    e.get("message")
+                                        .and_then(|m| m.as_str())
+                                        .map(|s| s.to_string())
+                                })
+                                .collect();
+                            if !error_messages.is_empty() {
+                                return Err(anyhow!(
+                                    "GraphQL errors: {}",
+                                    error_messages.join(", ")
+                                ));
+                            }
+                        }
+                    }
+
+                    Ok(data)
+                }
+            })
+            .await?;
 
         // Extract data from GraphQL response
         if let Some(obj) = data.as_object() {
             if let Some(Value::Object(data_obj)) = obj.get("data") {
+                // Check if there's a common pagination wrapper (e.g., "items", "nodes", "edges")
+                for key in ["items", "nodes", "edges", "results"] {
+                    if let Some(Value::Array(arr)) = data_obj.get(key) {
+                        let mut result = Vec::new();
+                        for item in arr {
+                            // For edges, extract node
+                            if key == "edges" {
+                                if let Value::Object(edge) = item {
+                                    if let Some(Value::Object(node)) = edge.get("node") {
+                                        result.push(node.clone().into_iter().collect());
+                                        continue;
+                                    }
+                                }
+                            }
+                            // For other cases, use item directly
+                            if let Value::Object(obj) = item {
+                                result.push(obj.clone().into_iter().collect());
+                            }
+                        }
+                        return Ok(result);
+                    }
+                }
+
+                // If no pagination wrapper found, return the data object itself
                 let map: HashMap<String, Value> = data_obj.clone().into_iter().collect();
                 return Ok(vec![map]);
             }
@@ -336,23 +674,75 @@ impl DataSource for GraphQLDataSource {
         mutation: &str,
         variables: &HashMap<String, Value>,
     ) -> Result<Value> {
-        let mut request_body = HashMap::new();
-        request_body.insert("query", Value::String(mutation.to_string()));
-        request_body.insert(
-            "variables",
-            Value::Object(variables.clone().into_iter().collect()),
-        );
+        debug!(endpoint = %self.endpoint, "Executing GraphQL mutation");
 
-        let mut request = self.client.post(&self.endpoint);
+        // Clone necessary data for the retry closure
+        let endpoint = self.endpoint.clone();
+        let headers = self.headers.clone();
+        let mutation_str = mutation.to_string();
+        let variables_clone = variables.clone();
+        let client = self.client.clone();
 
-        for (key, value) in &self.headers {
-            request = request.header(key, value);
-        }
+        self.execute_with_retry(|| {
+            let endpoint = endpoint.clone();
+            let headers = headers.clone();
+            let mutation = mutation_str.clone();
+            let variables = variables_clone.clone();
+            let client = client.clone();
 
-        let response = request.json(&request_body).send().await?;
-        let result: Value = response.json().await?;
+            async move {
+                let mut request_body = HashMap::new();
+                request_body.insert("query", Value::String(mutation));
+                request_body.insert("variables", Value::Object(variables.into_iter().collect()));
 
-        Ok(result)
+                let mut request = client.post(&endpoint);
+
+                for (key, value) in &headers {
+                    request = request.header(key, value);
+                }
+
+                let response = request
+                    .json(&request_body)
+                    .send()
+                    .await
+                    .map_err(|e| anyhow!("GraphQL mutation request failed: {}", e))?;
+
+                if !response.status().is_success() {
+                    return Err(anyhow!(
+                        "GraphQL mutation returned error status: {}",
+                        response.status()
+                    ));
+                }
+
+                let result: Value = response
+                    .json()
+                    .await
+                    .map_err(|e| anyhow!("Failed to parse GraphQL mutation response: {}", e))?;
+
+                // Check for GraphQL errors
+                if let Some(obj) = result.as_object() {
+                    if let Some(Value::Array(errors)) = obj.get("errors") {
+                        let error_messages: Vec<String> = errors
+                            .iter()
+                            .filter_map(|e| {
+                                e.get("message")
+                                    .and_then(|m| m.as_str())
+                                    .map(|s| s.to_string())
+                            })
+                            .collect();
+                        if !error_messages.is_empty() {
+                            return Err(anyhow!(
+                                "GraphQL mutation errors: {}",
+                                error_messages.join(", ")
+                            ));
+                        }
+                    }
+                }
+
+                Ok(result)
+            }
+        })
+        .await
     }
 }
 
@@ -397,15 +787,26 @@ impl DataSource for MongoDBDataSource {
     async fn execute_query(
         &self,
         query: &str,
+        params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        self.execute_query_paginated(query, params, None).await
+    }
+
+    async fn execute_query_paginated(
+        &self,
+        query: &str,
         _params: Option<&HashMap<String, Value>>,
+        pagination: Option<&PaginationParams>,
     ) -> Result<Vec<HashMap<String, Value>>> {
         use futures_util::TryStreamExt;
         use mongodb::bson::{doc, Document};
+        use mongodb::options::FindOptions;
 
         tracing::info!(
             query = %query,
             database = %self.database_name,
             collection = %self.collection_name,
+            pagination = ?pagination,
             "Executing MongoDB query"
         );
 
@@ -420,8 +821,18 @@ impl DataSource for MongoDBDataSource {
                 .map_err(|e| anyhow!("Invalid MongoDB filter JSON: {}", e))?
         };
 
+        // Add pagination options
+        let options = if let Some(p) = pagination {
+            FindOptions::builder()
+                .skip(Some(p.offset as u64))
+                .limit(Some(p.page_size as i64))
+                .build()
+        } else {
+            FindOptions::default()
+        };
+
         let mut cursor = collection
-            .find(filter, None)
+            .find(filter, Some(options))
             .await
             .map_err(|e| anyhow!("MongoDB find failed: {}", e))?;
 
@@ -499,6 +910,15 @@ impl DataSource for MongoDBDataSource {
         &self,
         _query: &str,
         _params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        Err(anyhow!("MongoDB support not enabled"))
+    }
+
+    async fn execute_query_paginated(
+        &self,
+        _query: &str,
+        _params: Option<&HashMap<String, Value>>,
+        _pagination: Option<&PaginationParams>,
     ) -> Result<Vec<HashMap<String, Value>>> {
         Err(anyhow!("MongoDB support not enabled"))
     }
@@ -607,6 +1027,17 @@ impl DataSource for RedisDataSource {
         }
     }
 
+    async fn execute_query_paginated(
+        &self,
+        key: &str,
+        params: Option<&HashMap<String, Value>>,
+        _pagination: Option<&PaginationParams>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        // Redis is a key-value store, pagination doesn't apply
+        // Just call the regular execute_query
+        self.execute_query(key, params).await
+    }
+
     async fn execute_mutation(&self, key: &str, data: &HashMap<String, Value>) -> Result<Value> {
         use redis::AsyncCommands;
 
@@ -661,6 +1092,15 @@ impl DataSource for RedisDataSource {
         Err(anyhow!("Redis support not enabled"))
     }
 
+    async fn execute_query_paginated(
+        &self,
+        _key: &str,
+        _params: Option<&HashMap<String, Value>>,
+        _pagination: Option<&PaginationParams>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        Err(anyhow!("Redis support not enabled"))
+    }
+
     async fn execute_mutation(&self, _key: &str, _data: &HashMap<String, Value>) -> Result<Value> {
         Err(anyhow!("Redis support not enabled"))
     }
@@ -668,22 +1108,30 @@ impl DataSource for RedisDataSource {
 
 /// Elasticsearch data source
 pub struct ElasticsearchDataSource {
-    #[allow(dead_code)]
     nodes: Vec<String>,
-    #[allow(dead_code)]
     index: String,
-    #[allow(dead_code)]
     client: reqwest::Client,
 }
 
 impl ElasticsearchDataSource {
     pub fn new(nodes: Vec<String>, index: String) -> Self {
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+
         Self {
             nodes,
             index,
             client,
         }
+    }
+
+    fn get_node_url(&self) -> &str {
+        self.nodes
+            .first()
+            .map(|s| s.as_str())
+            .unwrap_or("http://localhost:9200")
     }
 }
 
@@ -692,22 +1140,138 @@ impl DataSource for ElasticsearchDataSource {
     async fn execute_query(
         &self,
         query: &str,
-        _params: Option<&HashMap<String, Value>>,
+        params: Option<&HashMap<String, Value>>,
     ) -> Result<Vec<HashMap<String, Value>>> {
-        tracing::warn!(
-            "Elasticsearch query execution not yet fully implemented: {}",
-            query
-        );
-        Ok(vec![])
+        self.execute_query_paginated(query, params, None).await
     }
 
-    async fn execute_mutation(
+    async fn execute_query_paginated(
         &self,
-        _doc_id: &str,
-        _data: &HashMap<String, Value>,
-    ) -> Result<Value> {
-        tracing::warn!("Elasticsearch mutation execution not yet fully implemented");
-        Ok(Value::Bool(true))
+        query: &str,
+        _params: Option<&HashMap<String, Value>>,
+        pagination: Option<&PaginationParams>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        let node_url = self.get_node_url();
+        let search_url = format!("{}/{}/_search", node_url, self.index);
+
+        debug!(
+            url = %search_url,
+            pagination = ?pagination,
+            "Executing Elasticsearch query"
+        );
+
+        // Parse query as Elasticsearch DSL (JSON)
+        let mut query_obj: Value = if query.is_empty() || query == "{}" {
+            json!({
+                "query": {
+                    "match_all": {}
+                }
+            })
+        } else {
+            serde_json::from_str(query)
+                .map_err(|e| anyhow!("Invalid Elasticsearch query JSON: {}", e))?
+        };
+
+        // Add pagination
+        if let Some(p) = pagination {
+            if let Some(obj) = query_obj.as_object_mut() {
+                obj.insert("from".to_string(), Value::Number(p.offset.into()));
+                obj.insert("size".to_string(), Value::Number(p.page_size.into()));
+            }
+        }
+
+        let response = self
+            .client
+            .post(&search_url)
+            .header("Content-Type", "application/json")
+            .json(&query_obj)
+            .send()
+            .await
+            .map_err(|e| anyhow!("Elasticsearch request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(anyhow!(
+                "Elasticsearch returned error {}: {}",
+                status,
+                error_text
+            ));
+        }
+
+        let data: Value = response
+            .json()
+            .await
+            .map_err(|e| anyhow!("Failed to parse Elasticsearch response: {}", e))?;
+
+        // Extract hits from Elasticsearch response
+        let mut results = Vec::new();
+        if let Some(hits_wrapper) = data.get("hits").and_then(|h| h.get("hits")) {
+            if let Value::Array(hits) = hits_wrapper {
+                for hit in hits {
+                    if let Some(source) = hit.get("_source") {
+                        if let Value::Object(obj) = source {
+                            let mut map: HashMap<String, Value> = obj.clone().into_iter().collect();
+                            // Also include _id if available
+                            if let Some(id) = hit.get("_id") {
+                                map.insert("_id".to_string(), id.clone());
+                            }
+                            results.push(map);
+                        }
+                    }
+                }
+            }
+        }
+
+        info!(count = results.len(), "Elasticsearch query completed");
+        Ok(results)
+    }
+
+    async fn execute_mutation(&self, doc_id: &str, data: &HashMap<String, Value>) -> Result<Value> {
+        let node_url = self.get_node_url();
+        let index_url = if doc_id.is_empty() {
+            // POST without ID for auto-generated ID
+            format!("{}/{}/_doc", node_url, self.index)
+        } else {
+            // PUT with specific ID
+            format!("{}/{}/_doc/{}", node_url, self.index, doc_id)
+        };
+
+        debug!(url = %index_url, "Executing Elasticsearch mutation");
+
+        let response = self
+            .client
+            .request(
+                if doc_id.is_empty() {
+                    reqwest::Method::POST
+                } else {
+                    reqwest::Method::PUT
+                },
+                &index_url,
+            )
+            .header("Content-Type", "application/json")
+            .json(&data)
+            .send()
+            .await
+            .map_err(|e| anyhow!("Elasticsearch index request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(anyhow!(
+                "Elasticsearch index failed {}: {}",
+                status,
+                error_text
+            ));
+        }
+
+        let result: Value = response
+            .json()
+            .await
+            .map_err(|e| anyhow!("Failed to parse Elasticsearch index response: {}", e))?;
+
+        info!("Elasticsearch mutation completed");
+        Ok(result)
     }
 }
 
@@ -748,6 +1312,16 @@ impl DataSource for GrpcDataSource {
     ) -> Result<Vec<HashMap<String, Value>>> {
         tracing::warn!("gRPC query execution not yet fully implemented: {}", method);
         Ok(vec![])
+    }
+
+    async fn execute_query_paginated(
+        &self,
+        method: &str,
+        params: Option<&HashMap<String, Value>>,
+        _pagination: Option<&PaginationParams>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        // Call non-paginated version for stub
+        self.execute_query(method, params).await
     }
 
     async fn execute_mutation(
@@ -792,6 +1366,16 @@ impl DataSource for KafkaDataSource {
     ) -> Result<Vec<HashMap<String, Value>>> {
         tracing::warn!("Kafka query execution not yet fully implemented: {}", query);
         Ok(vec![])
+    }
+
+    async fn execute_query_paginated(
+        &self,
+        query: &str,
+        params: Option<&HashMap<String, Value>>,
+        _pagination: Option<&PaginationParams>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        // Call non-paginated version for stub
+        self.execute_query(query, params).await
     }
 
     async fn execute_mutation(
@@ -944,6 +1528,17 @@ impl DataSource for S3DataSource {
         }
     }
 
+    async fn execute_query_paginated(
+        &self,
+        key: &str,
+        params: Option<&HashMap<String, Value>>,
+        _pagination: Option<&PaginationParams>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        // S3 is object storage, pagination doesn't apply to individual objects
+        // Just call the regular execute_query
+        self.execute_query(key, params).await
+    }
+
     async fn execute_mutation(&self, key: &str, data: &HashMap<String, Value>) -> Result<Value> {
         use aws_sdk_s3::primitives::ByteStream;
 
@@ -1018,6 +1613,15 @@ impl DataSource for S3DataSource {
         Err(anyhow!("S3 support not enabled"))
     }
 
+    async fn execute_query_paginated(
+        &self,
+        _key: &str,
+        _params: Option<&HashMap<String, Value>>,
+        _pagination: Option<&PaginationParams>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        Err(anyhow!("S3 support not enabled"))
+    }
+
     async fn execute_mutation(&self, _key: &str, _data: &HashMap<String, Value>) -> Result<Value> {
         Err(anyhow!("S3 support not enabled"))
     }
@@ -1052,6 +1656,16 @@ impl DataSource for FirebaseDataSource {
             query
         );
         Ok(vec![])
+    }
+
+    async fn execute_query_paginated(
+        &self,
+        query: &str,
+        params: Option<&HashMap<String, Value>>,
+        _pagination: Option<&PaginationParams>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        // Call non-paginated version for stub
+        self.execute_query(query, params).await
     }
 
     async fn execute_mutation(
@@ -1091,19 +1705,81 @@ impl SupabaseDataSource {
 impl DataSource for SupabaseDataSource {
     async fn execute_query(
         &self,
-        _query: &str,
-        _params: Option<&HashMap<String, Value>>,
+        query: &str,
+        params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        self.execute_query_paginated(query, params, None).await
+    }
+
+    async fn execute_query_paginated(
+        &self,
+        query: &str,
+        params: Option<&HashMap<String, Value>>,
+        pagination: Option<&PaginationParams>,
     ) -> Result<Vec<HashMap<String, Value>>> {
         let url = format!("{}/rest/v1/{}", self.url, self.table);
 
-        let request = self
+        debug!(
+            url = %url,
+            table = %self.table,
+            pagination = ?pagination,
+            "Executing Supabase query"
+        );
+
+        let mut request = self
             .client
             .get(&url)
             .header("apikey", &self.api_key)
-            .header("Authorization", format!("Bearer {}", self.api_key));
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Prefer", "return=representation");
 
-        let response = request.send().await?;
-        let data: Value = response.json().await?;
+        // Add filters from query string (Supabase PostgREST format)
+        // Query can be in format: "column=eq.value" or "column=gte.value"
+        if !query.is_empty() {
+            // Parse query as filters
+            for filter in query.split('&') {
+                if let Some((key, value)) = filter.split_once('=') {
+                    request = request.query(&[(key, value)]);
+                }
+            }
+        }
+
+        // Add additional parameters
+        if let Some(params) = params {
+            for (key, value) in params {
+                if let Some(s) = value.as_str() {
+                    request = request.query(&[(key, s)]);
+                } else {
+                    request = request.query(&[(key, value.to_string())]);
+                }
+            }
+        }
+
+        // Add pagination using Supabase's Range headers
+        if let Some(p) = pagination {
+            let range_start = p.offset;
+            let range_end = p.offset + p.page_size - 1;
+            request = request
+                .header("Range", format!("{}-{}", range_start, range_end))
+                .header("Range-Unit", "items");
+        }
+
+        let response = request
+            .send()
+            .await
+            .map_err(|e| anyhow!("Supabase request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Supabase returned error status: {}",
+                response.status()
+            ));
+        }
+
+        let data: Value = response
+            .json()
+            .await
+            .map_err(|e| anyhow!("Failed to parse Supabase response: {}", e))?;
 
         match data {
             Value::Array(arr) => {
@@ -1114,6 +1790,7 @@ impl DataSource for SupabaseDataSource {
                         result.push(map);
                     }
                 }
+                info!(count = result.len(), "Supabase query completed");
                 Ok(result)
             }
             _ => Ok(vec![]),
@@ -1290,6 +1967,17 @@ impl DataSource for WebSocketDataSource {
         }
     }
 
+    async fn execute_query_paginated(
+        &self,
+        message: &str,
+        params: Option<&HashMap<String, Value>>,
+        _pagination: Option<&PaginationParams>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        // WebSocket is real-time bidirectional, pagination doesn't typically apply
+        // Just call the regular execute_query
+        self.execute_query(message, params).await
+    }
+
     async fn execute_mutation(
         &self,
         message: &str,
@@ -1375,6 +2063,15 @@ impl DataSource for WebSocketDataSource {
         &self,
         _message: &str,
         _params: Option<&HashMap<String, Value>>,
+    ) -> Result<Vec<HashMap<String, Value>>> {
+        Err(anyhow!("WebSocket support not enabled"))
+    }
+
+    async fn execute_query_paginated(
+        &self,
+        _message: &str,
+        _params: Option<&HashMap<String, Value>>,
+        _pagination: Option<&PaginationParams>,
     ) -> Result<Vec<HashMap<String, Value>>> {
         Err(anyhow!("WebSocket support not enabled"))
     }
